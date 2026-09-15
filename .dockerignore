@@ -1,0 +1,73 @@
+# Build context exclusions for the deploy image (see ./Dockerfile).
+#
+# The repository is ~450MB; most of that is documentation and git history that
+# has no place in a runtime image. Dependencies are deliberately excluded too —
+# the Dockerfile's composer and npm stages build them inside the image, so any
+# host-built vendor/ or node_modules/ would be both redundant and potentially
+# wrong for the image's PHP/Node versions.
+
+# Version control
+.git
+.gitattributes
+.github
+
+# Dependencies — rebuilt inside the image by the composer/assets stages
+vendor
+node_modules
+ccdaservice/node_modules
+ccdaservice/packages/*/node_modules
+
+# Documentation (~150MB) — not needed at runtime
+Documentation
+docs
+*.md
+!README.md
+
+# Tests and CI — not shipped to production
+tests
+ci
+.phpstan
+phpunit*.xml
+phpstan.neon.dist
+rector.php
+rector-*.php
+phpcs.xml.dist
+semgrep.yaml
+run-semgrep.sh
+codecov.yml
+jest.config.js
+eslint.config.mjs
+.stylelintrc.json
+.stylelintignore
+.pre-commit-config.yaml
+.codespell*
+.coderabbit.yaml
+.dclintrc.yaml
+.hadolint.yaml
+.shellcheckrc
+.editorconfig
+.composer-require-checker.json
+
+# Local scratch — Synthea jars, generated cohorts, debug scripts
+tmp
+tmp-phpstan
+.webpack-cache
+
+# Other docker contexts (the deploy image only needs docker/release/)
+docker/binary
+docker/container_benchmarking
+docker/development-easy
+docker/development-easy-light
+docker/development-easy-redis
+docker/development-insane
+docker/dockerhub
+docker/flex
+docker/production
+
+# Agent/tooling config
+.claude
+
+# Local environment
+.env
+.env.*
+!.env.example
