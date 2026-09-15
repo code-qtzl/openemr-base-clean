@@ -30,12 +30,31 @@ if ! [[ -f /etc/ssl/private/selfsigned.key.pem ]]; then
     echo "Generating self-signed SSL certificate..."
     # Ensure directories exist and are writable
     mkdir -p /etc/ssl/private /etc/ssl/certs
+    # Certificate identity. Override SSL_CN / SSL_SAN to match the hostname the
+    # deployment is actually served on.
+    ssl_cn="${SSL_CN:-${DOMAIN:-localhost}}"
+    if [[ "${ssl_cn}" == "localhost" ]]; then
+        ssl_san="${SSL_SAN:-DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1}"
+    else
+        ssl_san="${SSL_SAN:-DNS:${ssl_cn},DNS:localhost,IP:127.0.0.1,IP:0:0:0:0:0:0:0:1}"
+    fi
+
+    # Extensions are set explicitly for two reasons:
+    #   - Without basicConstraints, `openssl req -x509` mints a CA certificate
+    #     and apache logs AH01906 ("server certificate is a CA certificate").
+    #   - Without subjectAltName, apache logs AH01909 ("does NOT include an ID
+    #     which matches the server name") and every modern browser rejects the
+    #     cert outright, since CN has not been used for name matching in years.
     # Try to generate certificate, but don't fail if /etc/ssl is read-only
     if openssl req -x509 -newkey rsa:4096 \
         -keyout /etc/ssl/private/selfsigned.key.pem \
         -out /etc/ssl/certs/selfsigned.cert.pem \
         -days 365 -nodes \
-        -subj "/C=xx/ST=x/L=x/O=x/OU=x/CN=localhost" 2>/dev/null; then
+        -subj "/C=xx/ST=x/L=x/O=x/OU=x/CN=${ssl_cn}" \
+        -addext "basicConstraints=critical,CA:FALSE" \
+        -addext "keyUsage=critical,digitalSignature,keyEncipherment" \
+        -addext "extendedKeyUsage=serverAuth" \
+        -addext "subjectAltName=${ssl_san}" 2>/dev/null; then
         echo "Self-signed certificate generated"
     else
         echo "Warning: Could not generate self-signed certificate (read-only filesystem?)"

@@ -29,6 +29,29 @@ services:
     ports:
     - 80:80
     - 443:443
+    # FORK: container hardening. The apache master process must stay root -- it
+    # binds 80/443 and the entrypoint chowns files and writes /etc/ssl before
+    # dropping workers to the apache user via su-exec -- so a `user:` override
+    # here would break startup. Instead, strip the root process down to only the
+    # capabilities it actually needs. Verified empirically: the container boots,
+    # completes first-run setup, and serves an authenticated session with
+    # exactly these seven (CapEff 0x4eb) and nothing else.
+    #   CHOWN, DAC_OVERRIDE, FOWNER -> entrypoint permission fixes
+    #   SETGID, SETUID              -> su-exec drop to the apache user
+    #   NET_BIND_SERVICE            -> bind privileged ports 80/443
+    #   KILL                        -> apache graceful restart of workers
+    security_opt:
+    - no-new-privileges:true
+    cap_drop:
+    - ALL
+    cap_add:
+    - CHOWN
+    - DAC_OVERRIDE
+    - FOWNER
+    - SETGID
+    - SETUID
+    - NET_BIND_SERVICE
+    - KILL
     volumes:
     - logvolume01:/var/log
     - sitevolume:/var/www/localhost/htdocs/openemr/sites

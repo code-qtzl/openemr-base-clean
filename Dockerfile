@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 # ============================================================================
-# OpenEMR Dockerfile for Version 8.1.1
+# OpenEMR Dockerfile
+# ============================================================================
+# The application version is NOT hardcoded in this file. It is read from
+# version.php at build time and asserted against the OPENEMR_IMAGE_VERSION
+# build argument, so an image can never be tagged with a version that
+# disagrees with the code it contains. See the openemr-source stage.
 # ============================================================================
 # This Dockerfile builds a production-ready OpenEMR container image with:
 #   - Apache web server for serving OpenEMR
@@ -126,6 +131,10 @@ RUN apk add --no-cache \
 # Fix Apache to listen on all interfaces (0.0.0.0) instead of localhost only
 # This is required for Docker containers to accept external connections
 RUN sed -i 's/^Listen 80$/Listen 0.0.0.0:80/' /etc/apache2/httpd.conf
+# Set a default ServerName so apache does not emit AH00558 ("could not reliably
+# determine the server's fully qualified domain name") on every start. Deployments
+# with a real hostname should override this via their own vhost/config.
+RUN printf '\nServerName localhost\n' >> /etc/apache2/httpd.conf
 
 # ============================================================================
 # USER AND PERMISSIONS CONFIGURATION
@@ -167,6 +176,25 @@ WORKDIR /
 COPY . /openemr
 RUN rm -rf /openemr/.git
 
+# Derive the application version from version.php and fail the build if it
+# disagrees with OPENEMR_IMAGE_VERSION. An image whose tag does not match its
+# own contents is a traceability hole, so make that drift a build error rather
+# than something discovered after deployment. Update the default below (and
+# the image tag) whenever version.php changes.
+ARG OPENEMR_IMAGE_VERSION=8.2.0-dev
+# The single quotes around the php snippet are deliberate: PHP must receive
+# $v_major etc. literally rather than having the shell expand them.
+# hadolint ignore=SC2016
+RUN set -eu; \
+    detected="$(php -r 'require "/openemr/version.php"; echo $v_major . "." . $v_minor . "." . $v_patch . $v_tag;')"; \
+    echo "version.php reports: ${detected}"; \
+    if [ "${detected}" != "${OPENEMR_IMAGE_VERSION}" ]; then \
+        echo "ERROR: OPENEMR_IMAGE_VERSION=${OPENEMR_IMAGE_VERSION} does not match version.php (${detected})."; \
+        echo "       Rebuild with --build-arg OPENEMR_IMAGE_VERSION=${detected} and tag the image to match."; \
+        exit 1; \
+    fi; \
+    printf '%s' "${detected}" > /openemr-version
+
 # Stage 2: Install PHP dependencies (Composer)
 # Separate stage allows Docker to cache this layer independently
 FROM base AS openemr-composer
@@ -196,6 +224,22 @@ RUN --mount=type=cache,target=/root/.npm \
 # Stage 4: Final assembly - combine everything in base image
 # Combine everything and set permissions
 FROM base AS production
+
+# Standard OCI metadata. The version is the same value asserted against
+# version.php in the openemr-source stage, so `docker inspect` reports a version
+# that provably matches the code in the image.
+ARG OPENEMR_IMAGE_VERSION=8.2.0-dev
+LABEL org.opencontainers.image.title="OpenEMR" \
+      org.opencontainers.image.description="OpenEMR electronic health records and practice management" \
+      org.opencontainers.image.version="${OPENEMR_IMAGE_VERSION}" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later" \
+      org.opencontainers.image.url="https://www.open-emr.org" \
+      org.opencontainers.image.source="https://github.com/openemr/openemr"
+
+# Record the asserted version inside the image as well, so it can be read at
+# runtime without depending on labels surviving a registry round-trip.
+COPY --from=openemr-source /openemr-version /etc/openemr-version
+
 # Copy OpenEMR source
 COPY --from=openemr-source /openemr /tmp/openemr
 # Copy Composer dependencies
