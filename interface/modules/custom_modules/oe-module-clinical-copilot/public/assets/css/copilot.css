@@ -1,0 +1,39 @@
+/* Clinical Co-Pilot chart panel. */
+.copilot-log {
+    max-height: 18rem;
+    overflow-y: auto;
+    font-size: 0.9rem;
+}
+
+.copilot-log:empty {
+    display: none;
+}
+
+.copilot-msg {
+    padding: 0.4rem 0.6rem;
+    margin-bottom: 0.35rem;
+    border-radius: 0.25rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.copilot-msg-user {
+    background-color: rgba(0, 0, 0, 0.05);
+    font-weight: 600;
+}
+
+.copilot-msg-assistant {
+    background-color: rgba(0, 123, 255, 0.07);
+    border-left: 3px solid rgba(0, 123, 255, 0.5);
+}
+
+.copilot-msg-error {
+    background-color: rgba(220, 53, 69, 0.08);
+    border-left: 3px solid rgba(220, 53, 69, 0.6);
+}
+
+.copilot-tools {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-top: 0.25rem;
+}

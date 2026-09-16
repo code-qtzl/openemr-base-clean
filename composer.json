@@ -47,6 +47,7 @@
         "ext-zlib": "*",
         "academe/omnipay-authorizenetapi": "^3.1.2",
         "adodb/adodb-php": "^5.22.11",
+        "anthropic-ai/sdk": "^0.49.0",
         "aranyasen/hl7": "^3.2.2",
         "bacon/bacon-qr-code": "^3.0.3",
         "claimrevolution/oe-module-claimrev-connect": "^2.1",
