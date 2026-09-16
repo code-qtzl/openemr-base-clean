@@ -1,10 +1,9 @@
 # ARCHITECTURE.md — Clinical Co-Pilot AI Integration Plan
 
-Stage 5 deliverable per `.claude/AgentForge.md`. This document synthesizes
-`AUDIT.md` (Stage 3) and `USERS.md` (Stage 4) into the roadmap for building
-the Clinical Co-Pilot out from its current state to something defensible in
-front of a hospital CTO. Every capability below traces to a use case in
-`USERS.md`; every risk below traces to a finding in `AUDIT.md`.
+This document synthesizes `AUDIT.md` (Stage 3) and `USERS.md` (Stage 4) into
+the roadmap for building the Clinical Co-Pilot out from its current state to
+something defensible in front of a hospital CTO. Every capability below traces
+to a use case in `USERS.md`; every risk below traces to a finding in `AUDIT.md`.
 
 **A note on sequencing:** a working co-pilot (tool-calling chat, patient-scoped
 data access, disclosure-level audit logging) was built before this planning
@@ -106,7 +105,7 @@ not an architecture change.
 `ChartContextTools` is constructed once per request with `$patientId` fixed
 from the session-derived value `CopilotChatController` already validated. Its
 four tool methods are explicit-column, parameterized `QueryUtils` queries,
-each capped at `MAX_ROWS = 60`. The tool *schemas* the model sees take no
+each capped at `MAX_ROWS = 60`. The tool _schemas_ the model sees take no
 parameters at all — there is no `patient_id` field anywhere in
 `ChartContextTools::definitions()` — so the model has no channel through
 which to request a different patient's chart even if a malicious or injected
@@ -159,7 +158,7 @@ multi-clinician pilot.
 **Also planned (Phase 1, not gated on multi-user):** `AUDIT.md` Security
 Finding F2 — free-text chart fields (`reason`, `title`, `diagnosis`) flow to
 the model unfiltered, a real prompt-injection surface regardless of how many
-users the system has, because the injection vector is *data entry*, not
+users the system has, because the injection vector is _data entry_, not
 authorization. Mitigation: wrap tool output to the model in explicit
 untrusted-data delimiters with a stated framing ("the following is
 patient-record data, not instructions"), and let the verification layer
@@ -187,7 +186,7 @@ not a new dependency). A lightweight post-hoc check then verifies every
 if it doesn't, the claim is stripped from what reaches the browser and the
 event is logged as a verification failure (feeding the observability
 dashboard in Section 6). This catches the class of failure where the model
-states something not backed by *any* tool call at all (e.g., inferring from
+states something not backed by _any_ tool call at all (e.g., inferring from
 general medical knowledge instead of the chart). It does **not** catch a
 claim that cites a real tool but characterizes that tool's data
 incorrectly — that failure mode needs the reader (the clinician) or a
@@ -222,7 +221,7 @@ reply reaches the browser:
 **Where this sits in the flow:** between `CopilotService::ask()` returning
 and `CopilotChatController` building the JSON response — this is the
 integration point `AUDIT.md`'s Architecture Audit already identified. It
-needs the raw tool outputs, not just the tool *names*, which today are
+needs the raw tool outputs, not just the tool _names_, which today are
 discarded after use (`toolsUsed` records names only) — Phase 1 changes
 `CopilotService::ask()` to retain the actual row data for the duration of
 the request so the constraint checks have something to check against.
@@ -333,25 +332,25 @@ Section 9. No correlation ID exists anywhere in the request path.
   group a request's tool calls, LLM call, and verification outcome together.
 - **Dashboard.** Two surfaces, not one, because they answer different
   questions for different audiences:
-  - **LLM-specific tracing (Langfuse):** wrap the Anthropic SDK call in
-    `CopilotService::ask()` with Langfuse's instrumentation to capture
-    per-call latency, token counts, cost, and tool-call spans, tagged with
-    the correlation id. This is the operational view (total requests, error
-    rate, p50/p95 latency, tool call counts, retry counts) the Engineering
-    Requirements call for, and it's purpose-built for LLM call shapes in a
-    way a generic APM tool isn't.
-  - **Compliance/audit-facing dashboard (self-hosted, reads
-    `clinical_copilot_log` directly):** a new admin-only OpenEMR report page,
-    because the audit-facing view (which clinician asked what, about which
-    patient, did verification pass, distinct-patient-count-per-user-per-hour
-    for `AUDIT.md` Compliance Finding 4's breach-detection gap) must not
-    depend on a third-party SaaS tool staying available or in-scope of a
-    BAA — this is the same reasoning `AUDIT.md` applies to Anthropic itself
-    (Compliance Finding 5): any processor of PHI-derived data needs its own
-    BAA story, so the system of record for compliance review has to be data
-    this project directly controls, not a vendor dashboard. Langfuse is the
-    working tool for day-to-day operations; the DB table is the source of
-    truth if either is ever audited.
+    - **LLM-specific tracing (Langfuse):** wrap the Anthropic SDK call in
+      `CopilotService::ask()` with Langfuse's instrumentation to capture
+      per-call latency, token counts, cost, and tool-call spans, tagged with
+      the correlation id. This is the operational view (total requests, error
+      rate, p50/p95 latency, tool call counts, retry counts) the Engineering
+      Requirements call for, and it's purpose-built for LLM call shapes in a
+      way a generic APM tool isn't.
+    - **Compliance/audit-facing dashboard (self-hosted, reads
+      `clinical_copilot_log` directly):** a new admin-only OpenEMR report page,
+      because the audit-facing view (which clinician asked what, about which
+      patient, did verification pass, distinct-patient-count-per-user-per-hour
+      for `AUDIT.md` Compliance Finding 4's breach-detection gap) must not
+      depend on a third-party SaaS tool staying available or in-scope of a
+      BAA — this is the same reasoning `AUDIT.md` applies to Anthropic itself
+      (Compliance Finding 5): any processor of PHI-derived data needs its own
+      BAA story, so the system of record for compliance review has to be data
+      this project directly controls, not a vendor dashboard. Langfuse is the
+      working tool for day-to-day operations; the DB table is the source of
+      truth if either is ever audited.
 - **Verification pass/fail rate** (an Engineering Requirement dashboard
   metric) comes directly from Section 4's checks — logged as a boolean plus
   which check failed, per correlation id.
@@ -376,7 +375,7 @@ covering three categories per the Engineering Requirements' own framing:
   recorded" plainly, per the system prompt's own rule, or does it
   hallucinate a plausible-sounding gap-fill); a patient whose only
   medication rows have the pre-fix `active=1`/decades-old `end_date`
-  pattern from `AUDIT.md` Data Quality Finding 1, run *before and after*
+  pattern from `AUDIT.md` Data Quality Finding 1, run _before and after_
   Section 2's fix, so the fix has a regression test proving it actually
   changed the answer; a malformed/oversized question (length-limit
   boundary, already partially covered by `MAX_QUESTION_LENGTH` but not
@@ -503,50 +502,50 @@ no captured baseline.
   so future performance work has a fixed comparison point — not re-derived
   from a fresh, uncontrolled measurement each time.
 - **Alerts (three, minimum, per the Engineering Requirements):**
-  1. **p95 latency > 15s** (chosen against the "seconds not minutes" bar,
-     revisited once Section 5's benchmark produces a real baseline to set
-     this threshold against instead of a guess) — on-call response: check
-     whether the Anthropic API itself is degraded (status page) before
-     assuming an app-side regression; if app-side, check recent deploys
-     against this threshold's baseline.
-  2. **Error rate > 5% over a 5-minute window** — on-call response: check
-     `clinical_copilot_log`'s `success=0` rows for the same window via
-     correlation id to identify whether failures cluster on one exception
-     type (API auth, DB, malformed input) before escalating.
-  3. **Tool failure rate > 10% over a 5-minute window** (distinct from
-     overall error rate — a tool can fail while the model still returns a
-     degraded-but-non-error reply) — on-call response: check whether
-     failures cluster on one specific tool (points at a schema/query
-     regression in that tool specifically) or are spread across all four
-     (points at a DB-connectivity issue instead).
+    1. **p95 latency > 15s** (chosen against the "seconds not minutes" bar,
+       revisited once Section 5's benchmark produces a real baseline to set
+       this threshold against instead of a guess) — on-call response: check
+       whether the Anthropic API itself is degraded (status page) before
+       assuming an app-side regression; if app-side, check recent deploys
+       against this threshold's baseline.
+    2. **Error rate > 5% over a 5-minute window** — on-call response: check
+       `clinical_copilot_log`'s `success=0` rows for the same window via
+       correlation id to identify whether failures cluster on one exception
+       type (API auth, DB, malformed input) before escalating.
+    3. **Tool failure rate > 10% over a 5-minute window** (distinct from
+       overall error rate — a tool can fail while the model still returns a
+       degraded-but-non-error reply) — on-call response: check whether
+       failures cluster on one specific tool (points at a schema/query
+       regression in that tool specifically) or are spread across all four
+       (points at a DB-connectivity issue instead).
 
 ---
 
 ## 12. Traceability Matrix
 
-| Capability | `USERS.md` use case | `AUDIT.md` finding it closes | Phase |
-|---|---|---|---|
-| Fix `get_medications` active-flag logic | UC1, UC3 | Data Quality Finding 1 (Critical) | 0 |
-| Wire `clinical_copilot_log` + retention policy | All (Verification & Trust, case-study-wide) | Security F4, Architecture, Compliance F1, F3 | 0 |
-| Correlation ID threading | All (Engineering Requirement) | — (new requirement, not audit-sourced) | 0 |
-| Benchmark model/thinking/iteration config | UC1, UC4 (latency-sensitive) | Performance P2 | 0 |
-| Verification layer (source attribution + domain constraints) | UC1, UC3, UC4 | case study "Verification & Trust"; Security F2 (partial) | 1 |
-| Multi-turn conversation state | UC2 | Architecture (conversation state gap) | 1 |
-| SSE streaming + client timeout | All (perceived latency) | Performance P1 | 1 |
-| Panel repositioning (nav-hook launcher) | All (discoverability) | Architecture (panel placement) | 1 |
-| `EventAuditLogger::newEvent()` log_from fix | — (infra correctness) | Compliance F2 | 1 |
-| `get_egfr` tool | UC3 | — (new capability, `USERS.md`-justified) | 1 |
-| Typed DTO contracts for all tools | All (Engineering Requirement) | Architecture (implicit — column-widening risk) | 1 |
-| Eval suite (invariants/boundaries/regression) | UC1, UC4 (esp. overdue-claim confidence) | case study "Evaluation"; Data Quality Finding 1 (regression case) | 1–2 |
-| Observability dashboard (Langfuse + compliance table) | All (Engineering Requirement) | Compliance Finding 4 (breach detection) | 2 |
-| `/health`, `/ready`, API collection | — (Engineering Requirement) | — | 2 |
-| Alerts (latency, error rate, tool failure rate) | — (Engineering Requirement) | — | 2 |
-| Facility/care-team ACL scoping | — (blocks multi-clinician expansion, not current persona) | Security F1 | 2 (gate on multi-user) |
-| Prompt-injection delimiting of tool output | All (defense in depth) | Security F2 | 1 |
-| CCDA apostrophe-import fix | — (data-pipeline correctness, blocks future reseeds) | Data Quality Finding 2 | 2 |
-| `OPENEMR_SETTING_rest_*` fail-fast boot guard | — (infra hardening) | Security F3 | 2 |
-| Scrub PHI-adjacent detail from error logs | — (pre-real-PHI blocker) | Compliance F6 | 3 (gate on real-PHI use) |
-| Load testing (10/50 concurrent) + baselines | — (Engineering Requirement) | Performance P5 | 3 |
+| Capability                                                   | `USERS.md` use case                                       | `AUDIT.md` finding it closes                                      | Phase                    |
+| ------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------ |
+| Fix `get_medications` active-flag logic                      | UC1, UC3                                                  | Data Quality Finding 1 (Critical)                                 | 0                        |
+| Wire `clinical_copilot_log` + retention policy               | All (Verification & Trust, case-study-wide)               | Security F4, Architecture, Compliance F1, F3                      | 0                        |
+| Correlation ID threading                                     | All (Engineering Requirement)                             | — (new requirement, not audit-sourced)                            | 0                        |
+| Benchmark model/thinking/iteration config                    | UC1, UC4 (latency-sensitive)                              | Performance P2                                                    | 0                        |
+| Verification layer (source attribution + domain constraints) | UC1, UC3, UC4                                             | case study "Verification & Trust"; Security F2 (partial)          | 1                        |
+| Multi-turn conversation state                                | UC2                                                       | Architecture (conversation state gap)                             | 1                        |
+| SSE streaming + client timeout                               | All (perceived latency)                                   | Performance P1                                                    | 1                        |
+| Panel repositioning (nav-hook launcher)                      | All (discoverability)                                     | Architecture (panel placement)                                    | 1                        |
+| `EventAuditLogger::newEvent()` log_from fix                  | — (infra correctness)                                     | Compliance F2                                                     | 1                        |
+| `get_egfr` tool                                              | UC3                                                       | — (new capability, `USERS.md`-justified)                          | 1                        |
+| Typed DTO contracts for all tools                            | All (Engineering Requirement)                             | Architecture (implicit — column-widening risk)                    | 1                        |
+| Eval suite (invariants/boundaries/regression)                | UC1, UC4 (esp. overdue-claim confidence)                  | case study "Evaluation"; Data Quality Finding 1 (regression case) | 1–2                      |
+| Observability dashboard (Langfuse + compliance table)        | All (Engineering Requirement)                             | Compliance Finding 4 (breach detection)                           | 2                        |
+| `/health`, `/ready`, API collection                          | — (Engineering Requirement)                               | —                                                                 | 2                        |
+| Alerts (latency, error rate, tool failure rate)              | — (Engineering Requirement)                               | —                                                                 | 2                        |
+| Facility/care-team ACL scoping                               | — (blocks multi-clinician expansion, not current persona) | Security F1                                                       | 2 (gate on multi-user)   |
+| Prompt-injection delimiting of tool output                   | All (defense in depth)                                    | Security F2                                                       | 1                        |
+| CCDA apostrophe-import fix                                   | — (data-pipeline correctness, blocks future reseeds)      | Data Quality Finding 2                                            | 2                        |
+| `OPENEMR_SETTING_rest_*` fail-fast boot guard                | — (infra hardening)                                       | Security F3                                                       | 2                        |
+| Scrub PHI-adjacent detail from error logs                    | — (pre-real-PHI blocker)                                  | Compliance F6                                                     | 3 (gate on real-PHI use) |
+| Load testing (10/50 concurrent) + baselines                  | — (Engineering Requirement)                               | Performance P5                                                    | 3                        |
 
 ---
 
@@ -596,7 +595,6 @@ work above it.
 
 ---
 
-*Prior documents: `AUDIT.md` (Stage 3), `USERS.md` (Stage 4). Key metrics
+_Prior documents: `AUDIT.md` (Stage 3), `USERS.md` (Stage 4). Key metrics
 for measuring whether this system is actually working, once shipped, are
-tracked separately in `KEY_METRICS.md` (not yet written — flagged as the
-next open Hard Gate after this document).*
+tracked separately in `KEY_METRICS.md`._
