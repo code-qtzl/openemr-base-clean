@@ -15,6 +15,13 @@
  *     layer. No request parameter and no model output can redirect it at
  *     another patient.
  *
+ * It is also where the request's correlation id is minted. Every response --
+ * success or error -- carries it, every log line this request produces
+ * (EventAuditLogger, the PHP error log, clinical_copilot_log) is tagged with
+ * it, and it rides along as an outbound header on the Anthropic call. A full
+ * trace of one request can be reconstructed from logs alone by grepping for
+ * that one id.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -32,7 +39,9 @@ use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
+use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
+use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,6 +50,11 @@ final class CopilotChatController
 {
     private const MAX_QUESTION_LENGTH = 2000;
 
+    public function __construct(
+        private readonly CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
+    ) {
+    }
+
     public function handleRequest(): void
     {
         $this->buildResponse(Request::createFromGlobals())->send();
@@ -48,53 +62,85 @@ final class CopilotChatController
 
     private function buildResponse(Request $request): JsonResponse
     {
+        $correlationId = Uuid::uuid4()->toString();
         $session = SessionWrapperFactory::getInstance()->getActiveSession();
 
         if (!CsrfUtils::verifyCsrfToken($request->request->get('csrf_token'), $session)) {
-            return $this->error(xl('Session expired. Reload the page and try again.'), 403);
+            return $this->error(xl('Session expired. Reload the page and try again.'), 403, $correlationId);
         }
 
         if (!AclMain::aclCheckCore('patients', 'demo')) {
-            return $this->error(xl('You do not have permission to view this chart.'), 403);
+            return $this->error(xl('You do not have permission to view this chart.'), 403, $correlationId);
         }
 
         $sessionPid = $session->get('pid');
         $patientId = is_numeric($sessionPid) ? (int) $sessionPid : 0;
         if ($patientId <= 0) {
-            return $this->error(xl('No patient is currently selected.'), 400);
+            return $this->error(xl('No patient is currently selected.'), 400, $correlationId);
         }
 
         $question = trim($request->request->getString('question'));
         if ($question === '') {
-            return $this->error(xl('Please enter a question.'), 400);
+            return $this->error(xl('Please enter a question.'), 400, $correlationId);
         }
         if (mb_strlen($question) > self::MAX_QUESTION_LENGTH) {
-            return $this->error(xl('Question is too long.'), 400);
+            return $this->error(xl('Question is too long.'), 400, $correlationId);
         }
+
+        $authUser = $this->sessionString($session->get('authUser'));
+        $startedAt = microtime(true);
 
         try {
             $tools = new ChartContextTools(
                 $patientId,
-                $this->sessionString($session->get('authUser')),
+                $authUser,
                 $this->sessionString($session->get('authProvider')),
+                $correlationId,
             );
 
-            $result = (new CopilotService($tools))->ask($question);
+            $result = (new CopilotService($tools))->ask($question, $correlationId);
+
+            $this->interactionLogger->logSuccess(
+                $correlationId,
+                $patientId,
+                $authUser,
+                $question,
+                $result['reply'],
+                $result['toolsUsed'],
+                CopilotService::model(),
+                self::elapsedMs($startedAt),
+            );
 
             return new JsonResponse([
                 'reply' => $result['reply'],
                 'toolsUsed' => $result['toolsUsed'],
+                'correlationId' => $correlationId,
             ]);
         } catch (AnthropicException | SqlQueryException | RuntimeException | JsonException $e) {
             // Exception messages can carry API detail, prompt content or SQL.
             // Log with PSR-3 context; return something generic to the browser.
             ServiceContainer::getLogger()->error('Clinical Co-Pilot request failed', [
+                'correlationId' => $correlationId,
                 'pid' => $patientId,
                 'exception' => $e,
             ]);
 
-            return $this->error(xl('The co-pilot could not answer that right now.'), 500);
+            $this->interactionLogger->logFailure(
+                $correlationId,
+                $patientId,
+                $authUser,
+                $question,
+                CopilotService::model(),
+                self::elapsedMs($startedAt),
+            );
+
+            return $this->error(xl('The co-pilot could not answer that right now.'), 500, $correlationId);
         }
+    }
+
+    private static function elapsedMs(float $startedAt): int
+    {
+        return (int) round((microtime(true) - $startedAt) * 1000);
     }
 
     /**
@@ -105,8 +151,8 @@ final class CopilotChatController
         return is_string($value) ? $value : '';
     }
 
-    private function error(string $message, int $status): JsonResponse
+    private function error(string $message, int $status, string $correlationId): JsonResponse
     {
-        return new JsonResponse(['error' => $message], $status);
+        return new JsonResponse(['error' => $message, 'correlationId' => $correlationId], $status);
     }
 }

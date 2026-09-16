@@ -69,7 +69,11 @@
             .then(function (data) {
                 log.removeChild(pending);
                 if (data.error) {
-                    append(data.error, 'error');
+                    var message = data.error;
+                    if (data.correlationId) {
+                        message += ' (reference: ' + data.correlationId + ')';
+                    }
+                    append(message, 'error');
                 } else {
                     append(data.reply || '(no answer returned)', 'assistant', data.toolsUsed);
                 }

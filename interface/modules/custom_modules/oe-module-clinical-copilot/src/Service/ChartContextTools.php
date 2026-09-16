@@ -15,8 +15,10 @@
  *  2. Every query names its columns explicitly. No SELECT *. Adding a column
  *     to one of these tables must not silently widen what leaves the building.
  *
- * Every invocation is written to OpenEMR's audit log with log_from='copilot',
- * so each disclosure is attributable to a user, a patient, and a timestamp.
+ * Every invocation is written to OpenEMR's audit log under the
+ * 'clinical-copilot-tool' event/category, tagged with a correlation id, so
+ * each disclosure is attributable to a user, a patient, a timestamp, and the
+ * request that caused it.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -31,6 +33,15 @@ use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Logging\EventAuditLogger;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cResultRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncounterRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult;
+use RuntimeException;
 
 final class ChartContextTools
 {
@@ -47,6 +58,7 @@ final class ChartContextTools
         private readonly int $patientId,
         private readonly string $authUser,
         private readonly string $authProvider,
+        private readonly string $correlationId,
     ) {
     }
 
@@ -94,41 +106,41 @@ final class ChartContextTools
 
     /**
      * Dispatch one tool call and audit it.
-     *
-     * @return array{ok: bool, rows?: list<array<mixed>>, count?: int, error?: string}
      */
-    public function call(string $toolName): array
+    public function call(
+        string $toolName
+    ): A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult {
+        $result = match ($toolName) {
+            'get_a1c_series'        => $this->a1cSeries(),
+            'get_active_problems'   => $this->activeProblems(),
+            'get_medications'       => $this->medications(),
+            'get_recent_encounters' => $this->recentEncounters(),
+            default                 => $this->rejectUnknownTool($toolName),
+        };
+
+        $this->audit(
+            $toolName,
+            $result->ok,
+            $result->ok
+                ? ($result->count() . ' row(s) disclosed')
+                : ('tool execution failed: ' . ($result->error ?? 'unknown error')),
+        );
+
+        return $result;
+    }
+
+    /**
+     * There is no code path that reaches this today: the tool runner only
+     * ever invokes names drawn from definitions() above. It exists so
+     * call()'s match stays exhaustive without a silently-swallowed default,
+     * and so a future new tool definition that forgets a matching branch
+     * here fails loudly instead of returning a bogus result to the model.
+     */
+    private function rejectUnknownTool(string $toolName): never
     {
-        try {
-            $rows = match ($toolName) {
-                'get_a1c_series'        => $this->a1cSeries(),
-                'get_active_problems'   => $this->activeProblems(),
-                'get_medications'       => $this->medications(),
-                'get_recent_encounters' => $this->recentEncounters(),
-                default                 => null,
-            };
-        } catch (SqlQueryException $e) {
-            // The message can carry SQL detail, so it is logged with PSR-3
-            // context and never surfaced. The model (and therefore the user)
-            // sees only a generic string.
-            ServiceContainer::getLogger()->error('Clinical Co-Pilot tool failed', [
-                'tool' => $toolName,
-                'exception' => $e,
-            ]);
-            $this->audit($toolName, false, 'tool execution failed');
+        $this->audit($toolName, false, 'unknown tool requested');
 
-            return ['ok' => false, 'error' => 'Could not retrieve that part of the chart.'];
-        }
-
-        if ($rows === null) {
-            $this->audit($toolName, false, 'unknown tool requested');
-
-            return ['ok' => false, 'error' => 'Unknown tool.'];
-        }
-
-        $this->audit($toolName, true, count($rows) . ' row(s) disclosed');
-
-        return ['ok' => true, 'count' => count($rows), 'rows' => $rows];
+        throw new RuntimeException(sprintf('Unknown Clinical Co-Pilot tool requested: %s', $toolName));
     }
 
     /**
@@ -139,7 +151,10 @@ final class ChartContextTools
      * a $log_from argument, but only forwards it to recordLogItem() when it is
      * exactly 'patient-portal' -- every other value is dropped and the column
      * defaults to 'open-emr'. So do not pass one; identify co-pilot activity by
-     * this event/category string instead.
+     * this event/category string instead. The correlation id is folded into
+     * the free-text comment for the same reason: it is the only field
+     * newEvent() does not drop, so it is what lets this entry be found by
+     * grepping for the id alongside the PHP error log and clinical_copilot_log.
      */
     private function audit(string $toolName, bool $success, string $detail): void
     {
@@ -148,73 +163,169 @@ final class ChartContextTools
             $this->authUser,
             $this->authProvider,
             $success ? 1 : 0,
-            $toolName . ': ' . $detail,
+            sprintf('[%s] %s: %s', $this->correlationId, $toolName, $detail),
             $this->patientId,
         );
     }
 
-    /** @return list<array<mixed>> */
-    private function a1cSeries(): array
+    private function a1cSeries(): A1cSeriesResult
     {
-        return QueryUtils::fetchRecords(
-            'SELECT pres.`date`      AS result_date,
-                    pres.`result`    AS value,
-                    pres.`units`     AS units,
-                    pres.`range`     AS reference_range,
-                    pres.`abnormal`  AS abnormal_flag
-               FROM `procedure_result` pres
-               JOIN `procedure_report` prep
-                 ON prep.`procedure_report_id` = pres.`procedure_report_id`
-               JOIN `procedure_order` po
-                 ON po.`procedure_order_id` = prep.`procedure_order_id`
-              WHERE po.`patient_id` = ?
-                AND pres.`result_code` = ?
-              ORDER BY pres.`date` ASC
-              LIMIT ' . self::MAX_ROWS,
-            [$this->patientId, self::LOINC_A1C]
+        try {
+            $records = QueryUtils::fetchRecords(
+                'SELECT pres.`date`      AS result_date,
+                        pres.`result`    AS value,
+                        pres.`units`     AS units,
+                        pres.`range`     AS reference_range,
+                        pres.`abnormal`  AS abnormal_flag
+                   FROM `procedure_result` pres
+                   JOIN `procedure_report` prep
+                     ON prep.`procedure_report_id` = pres.`procedure_report_id`
+                   JOIN `procedure_order` po
+                     ON po.`procedure_order_id` = prep.`procedure_order_id`
+                  WHERE po.`patient_id` = ?
+                    AND pres.`result_code` = ?
+                  ORDER BY pres.`date` ASC
+                  LIMIT ' . self::MAX_ROWS,
+                [$this->patientId, self::LOINC_A1C]
+            );
+        } catch (SqlQueryException $e) {
+            $this->logToolFailure('get_a1c_series', $e);
+
+            return A1cSeriesResult::failed('Could not retrieve that part of the chart.');
+        }
+
+        return A1cSeriesResult::ok(array_map(self::mapA1cRow(...), $records));
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapA1cRow(array $row): A1cResultRow
+    {
+        return new A1cResultRow(
+            resultDate: self::nullableString($row['result_date'] ?? null),
+            value: self::nullableString($row['value'] ?? null),
+            units: self::nullableString($row['units'] ?? null),
+            referenceRange: self::nullableString($row['reference_range'] ?? null),
+            abnormalFlag: self::nullableString($row['abnormal_flag'] ?? null),
         );
     }
 
-    /** @return list<array<mixed>> */
-    private function activeProblems(): array
+    private function activeProblems(): ActiveProblemsResult
     {
-        return QueryUtils::fetchRecords(
-            'SELECT `title`, `diagnosis`, `begdate` AS onset_date, `enddate` AS resolved_date, `outcome`
-               FROM `lists`
-              WHERE `pid` = ?
-                AND `type` = ?
-                AND `activity` = 1
-              ORDER BY `begdate` DESC
-              LIMIT ' . self::MAX_ROWS,
-            [$this->patientId, 'medical_problem']
+        try {
+            $records = QueryUtils::fetchRecords(
+                'SELECT `title`, `diagnosis`, `begdate` AS onset_date, `enddate` AS resolved_date, `outcome`
+                   FROM `lists`
+                  WHERE `pid` = ?
+                    AND `type` = ?
+                    AND `activity` = 1
+                  ORDER BY `begdate` DESC
+                  LIMIT ' . self::MAX_ROWS,
+                [$this->patientId, 'medical_problem']
+            );
+        } catch (SqlQueryException $e) {
+            $this->logToolFailure('get_active_problems', $e);
+
+            return ActiveProblemsResult::failed('Could not retrieve that part of the chart.');
+        }
+
+        return ActiveProblemsResult::ok(array_map(self::mapActiveProblemRow(...), $records));
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapActiveProblemRow(array $row): ActiveProblemRow
+    {
+        return new ActiveProblemRow(
+            title: self::nullableString($row['title'] ?? null),
+            diagnosis: self::nullableString($row['diagnosis'] ?? null),
+            onsetDate: self::nullableString($row['onset_date'] ?? null),
+            resolvedDate: self::nullableString($row['resolved_date'] ?? null),
+            outcome: self::nullableString($row['outcome'] ?? null),
         );
     }
 
-    /** @return list<array<mixed>> */
-    private function medications(): array
+    private function medications(): MedicationsResult
     {
-        return QueryUtils::fetchRecords(
-            'SELECT `drug`, `dosage`, `form`, `interval`, `route`, `quantity`,
-                    `start_date`, `end_date`
-               FROM `prescriptions`
-              WHERE `patient_id` = ?
-                AND `active` = 1
-              ORDER BY `start_date` DESC
-              LIMIT ' . self::MAX_ROWS,
-            [$this->patientId]
+        try {
+            $records = QueryUtils::fetchRecords(
+                'SELECT `drug`, `dosage`, `form`, `interval`, `route`, `quantity`,
+                        `start_date`, `end_date`
+                   FROM `prescriptions`
+                  WHERE `patient_id` = ?
+                    AND `active` = 1
+                  ORDER BY `start_date` DESC
+                  LIMIT ' . self::MAX_ROWS,
+                [$this->patientId]
+            );
+        } catch (SqlQueryException $e) {
+            $this->logToolFailure('get_medications', $e);
+
+            return MedicationsResult::failed('Could not retrieve that part of the chart.');
+        }
+
+        return MedicationsResult::ok(array_map(self::mapMedicationRow(...), $records));
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapMedicationRow(array $row): MedicationRow
+    {
+        return new MedicationRow(
+            drug: self::nullableString($row['drug'] ?? null),
+            dosage: self::nullableString($row['dosage'] ?? null),
+            form: self::nullableString($row['form'] ?? null),
+            interval: self::nullableString($row['interval'] ?? null),
+            route: self::nullableString($row['route'] ?? null),
+            quantity: self::nullableString($row['quantity'] ?? null),
+            startDate: self::nullableString($row['start_date'] ?? null),
+            endDate: self::nullableString($row['end_date'] ?? null),
         );
     }
 
-    /** @return list<array<mixed>> */
-    private function recentEncounters(): array
+    private function recentEncounters(): RecentEncountersResult
     {
-        return QueryUtils::fetchRecords(
-            'SELECT `date` AS encounter_date, `reason`, `encounter_type_description`
-               FROM `form_encounter`
-              WHERE `pid` = ?
-              ORDER BY `date` DESC
-              LIMIT 20',
-            [$this->patientId]
+        try {
+            $records = QueryUtils::fetchRecords(
+                'SELECT `date` AS encounter_date, `reason`, `encounter_type_description`
+                   FROM `form_encounter`
+                  WHERE `pid` = ?
+                  ORDER BY `date` DESC
+                  LIMIT 20',
+                [$this->patientId]
+            );
+        } catch (SqlQueryException $e) {
+            $this->logToolFailure('get_recent_encounters', $e);
+
+            return RecentEncountersResult::failed('Could not retrieve that part of the chart.');
+        }
+
+        return RecentEncountersResult::ok(array_map(self::mapRecentEncounterRow(...), $records));
+    }
+
+    /** @param array<string, mixed> $row */
+    private static function mapRecentEncounterRow(array $row): RecentEncounterRow
+    {
+        return new RecentEncounterRow(
+            encounterDate: self::nullableString($row['encounter_date'] ?? null),
+            reason: self::nullableString($row['reason'] ?? null),
+            encounterTypeDescription: self::nullableString($row['encounter_type_description'] ?? null),
         );
+    }
+
+    /**
+     * Log a query failure (the exception can carry SQL detail, so it goes to
+     * PSR-3 context and never further) so callers can return their own
+     * failed() DTO and let the model see only a generic message.
+     */
+    private function logToolFailure(string $toolName, SqlQueryException $e): void
+    {
+        ServiceContainer::getLogger()->error('Clinical Co-Pilot tool failed', [
+            'correlationId' => $this->correlationId,
+            'tool' => $toolName,
+            'exception' => $e,
+        ]);
+    }
+
+    private static function nullableString(mixed $value): ?string
+    {
+        return is_string($value) ? $value : null;
     }
 }

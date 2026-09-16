@@ -217,18 +217,28 @@ chmod 0600 "${SITE_DIR}/sqlconf.php"
 log "registering clinical co-pilot module"
 db --database="${MYSQL_DATABASE}" <<'MODULESQL' || die "module registration failed"
 CREATE TABLE IF NOT EXISTS `clinical_copilot_log` (
-  `id`         BIGINT(20)   NOT NULL AUTO_INCREMENT,
-  `pid`        BIGINT(20)   NOT NULL,
-  `user`       VARCHAR(255) NOT NULL,
-  `asked_at`   DATETIME     NOT NULL,
-  `question`   TEXT         NOT NULL,
-  `reply`      MEDIUMTEXT       NULL,
-  `tools_used` VARCHAR(255)     NULL,
-  `model`      VARCHAR(64)      NULL,
-  `success`    TINYINT(1)   NOT NULL DEFAULT 0,
+  `id`             BIGINT(20)   NOT NULL AUTO_INCREMENT,
+  `correlation_id` VARCHAR(36)      NULL,
+  `pid`            BIGINT(20)   NOT NULL,
+  `user`           VARCHAR(255) NOT NULL,
+  `asked_at`       DATETIME     NOT NULL,
+  `question`       TEXT         NOT NULL,
+  `reply`          MEDIUMTEXT       NULL,
+  `tools_used`     VARCHAR(255)     NULL,
+  `model`          VARCHAR(64)      NULL,
+  `success`        TINYINT(1)   NOT NULL DEFAULT 0,
+  `latency_ms`     INT UNSIGNED     NULL,
   PRIMARY KEY (`id`),
-  KEY `pid_asked_at` (`pid`, `asked_at`)
+  KEY `pid_asked_at` (`pid`, `asked_at`),
+  KEY `correlation_id` (`correlation_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Idempotent upgrade for a demo volume seeded before these columns existed.
+-- MariaDB (this image's engine) supports IF NOT EXISTS on ADD COLUMN; a
+-- fresh CREATE TABLE above already has both, so this is a no-op there.
+ALTER TABLE `clinical_copilot_log`
+  ADD COLUMN IF NOT EXISTS `correlation_id` VARCHAR(36) NULL AFTER `id`,
+  ADD COLUMN IF NOT EXISTS `latency_ms` INT UNSIGNED NULL AFTER `success`;
 
 INSERT INTO `modules`
     (`mod_name`, `mod_directory`, `mod_parent`, `mod_type`, `mod_active`,

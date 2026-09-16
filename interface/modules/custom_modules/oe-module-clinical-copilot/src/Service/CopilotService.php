@@ -37,6 +37,13 @@ final class CopilotService
     /** Hard ceiling on tool round-trips, so a loop cannot run away. */
     private const MAX_ITERATIONS = 8;
 
+    /**
+     * Outbound header carrying the request's correlation id on every call to
+     * the Anthropic API, so a trace can be tied back to a specific request
+     * from either side (this application's logs, or Anthropic's own).
+     */
+    private const CORRELATION_HEADER = 'X-Correlation-Id';
+
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are a clinical co-pilot embedded in an electronic health record, assisting a
         licensed clinician who is currently viewing one patient's chart.
@@ -82,12 +89,17 @@ final class CopilotService
         return self::apiKey() !== null;
     }
 
+    public static function model(): string
+    {
+        return self::MODEL;
+    }
+
     /**
      * Answer one question, including any tool round-trips.
      *
      * @return array{reply: string, toolsUsed: list<string>}
      */
-    public function ask(string $question): array
+    public function ask(string $question, string $correlationId): array
     {
         $apiKey = self::apiKey();
         if ($apiKey === null) {
@@ -107,12 +119,17 @@ final class CopilotService
                     // parameters, because the patient is fixed by the session.
                     $toolsUsed[] = $name;
 
-                    return json_encode($this->tools->call($name), JSON_THROW_ON_ERROR);
+                    return json_encode($this->tools->call($name)->toArray(), JSON_THROW_ON_ERROR);
                 },
             );
         }
 
-        $runner = (new Client(apiKey: $apiKey))->beta->messages->toolRunner(
+        $client = new Client(
+            apiKey: $apiKey,
+            requestOptions: ['extraHeaders' => [self::CORRELATION_HEADER => $correlationId]],
+        );
+
+        $runner = $client->beta->messages->toolRunner(
             maxTokens: self::MAX_TOKENS,
             messages: [['role' => 'user', 'content' => $question]],
             model: self::MODEL,
