@@ -1,0 +1,38 @@
+# Auto-deploy to Railway on push to main.
+#
+# Railway's native git integration only supports GitHub, and this project lives
+# on a self-hosted GitLab, so deployment runs here and shells out to the Railway
+# CLI instead.
+#
+# Requires a CI/CD variable RAILWAY_TOKEN (Settings -> CI/CD -> Variables),
+# marked Masked and Protected. Use a Railway *project* token: it scopes the CLI
+# to one project/environment, so no `railway link` step is needed.
+#
+# NOTE: this needs an available GitLab runner. Self-hosted instances have none
+# by default -- check Settings -> CI/CD -> Runners. Without one, deploy manually
+# with `railway up --service openemr --environment production --ci`.
+
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  image: node:20-alpine
+  rules:
+    # main only. Never on merge requests or side branches: the service has a
+    # volume, so deploys cannot overlap and each one briefly drops the demo.
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    # Shallow clone is enough; the uploader only reads the working tree.
+    GIT_DEPTH: "1"
+  before_script:
+    - |
+      if [ -z "${RAILWAY_TOKEN:-}" ]; then
+        echo "RAILWAY_TOKEN is not set -- add it under Settings > CI/CD > Variables (masked + protected)."
+        exit 1
+      fi
+    - npm install -g @railway/cli
+  script:
+    # --ci streams build logs and exits non-zero on build failure, so a broken
+    # build fails the pipeline instead of silently detaching.
+    - railway up --service openemr --environment production --ci

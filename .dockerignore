@@ -71,3 +71,14 @@ docker/production
 .env
 .env.*
 !.env.example
+
+# Deploy-size trims. None of these are needed at runtime for this deployment:
+# - language_translations is referenced only by Installer.class.php:120 (the
+#   fresh-install path, which the Railway entrypoint guarantees never runs).
+# - icd9/icd10/portal_templates are optional admin data-load assets.
+# Keep these in sync with .railwayignore, or the build breaks on missing files.
+contrib/util/language_translations
+contrib/icd9
+contrib/icd10
+contrib/portal_templates
+**/*.map

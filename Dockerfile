@@ -250,6 +250,29 @@ COPY --from=openemr-composer /openemr/composer.lock /tmp/openemr/composer.lock
 COPY --from=openemr-assets /openemr/public /tmp/openemr/public
 COPY --from=openemr-assets /openemr/ccdaservice /tmp/openemr/ccdaservice
 
+# ============================================================================
+# FORK: RELOCATE THE DEMO SEED, AND DROP docker/ FROM THE WEB ROOT
+# ============================================================================
+# `COPY . /openemr` brings the whole repo -- including docker/ -- into the tree
+# that becomes DocumentRoot. Those files end up mode 400 owned by apache, so
+# Apache can serve them, and openemr.conf only denies sites/*/documents and
+# bin/. That would publish the demo database dump (users_secure bcrypt hashes,
+# the entire globals table) at /docker/release/seed/*.sql.gz, plus a readable
+# copy of openemr.sh and auto_configure.php under /docker/release/.
+#
+# (The top-level openemr.sh / auto_configure.php copied in later are a separate
+# thing and are already protected by root-owned 500/000 permissions.)
+#
+# Move the seed to /opt -- outside DocumentRoot -- and delete docker/ entirely.
+# root:apache 0440 lets the boot entrypoint (root) read it for the restore, and
+# the apache-run admin "reset demo data" action read it without a redeploy.
+RUN mkdir -p /opt/openemr-seed \
+    && mv /tmp/openemr/docker/release/seed/*.sql.gz /opt/openemr-seed/ \
+    && rm -rf /tmp/openemr/docker \
+    && chown -R root:apache /opt/openemr-seed \
+    && chmod 0750 /opt/openemr-seed \
+    && chmod 0440 /opt/openemr-seed/*.sql.gz
+
 RUN cd /tmp \
     # =========================================================================
     # PRE-SET FILE PERMISSIONS DURING BUILD (major startup optimization)
@@ -319,6 +342,24 @@ COPY docker/release/utilities/unlock_admin.php docker/release/utilities/unlock_a
 # - PHP scripts: 000 (no access) - prevents accidental execution until enabled
 RUN chmod 500 openemr.sh ssl.sh xdebug.sh /root/unlock_admin.sh \
     && chmod 000 auto_configure.php /root/unlock_admin.php
+
+# ============================================================================
+# FORK: RAILWAY BOOT WRAPPER
+# ============================================================================
+# railway-entrypoint.sh becomes the platform startCommand. It restores the demo
+# seed, writes sqlconf.php, rotates the admin password, then `exec`s the stock
+# openemr.sh -- so the image stays byte-identical to what runs anywhere else.
+#
+# harden.php is NOT in /root: it runs dropped to the apache user via su-exec,
+# and /root is 0700 root:root, so apache could not even traverse it. /opt with
+# root:apache 0750 lets apache read it while staying unwritable and outside
+# DocumentRoot.
+COPY docker/release/railway/railway-entrypoint.sh /root/railway-entrypoint.sh
+COPY docker/release/railway/harden.php /opt/openemr-railway/harden.php
+RUN chmod 0500 /root/railway-entrypoint.sh \
+    && chown -R root:apache /opt/openemr-railway \
+    && chmod 0750 /opt/openemr-railway \
+    && chmod 0440 /opt/openemr-railway/harden.php
 
 # ============================================================================
 # UPGRADE SYSTEM
