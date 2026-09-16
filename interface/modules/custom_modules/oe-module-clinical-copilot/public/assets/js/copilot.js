@@ -17,6 +17,7 @@
     var sendBtn = document.getElementById('copilot-send');
     var log = document.getElementById('copilot-log');
     var csrf = document.getElementById('copilot-csrf');
+    var endpoint = form.dataset.endpoint;
 
     function append(text, variant, toolsUsed) {
         var div = document.createElement('div');
@@ -54,7 +55,7 @@
         body.append('question', question);
         body.append('csrf_token', csrf.value);
 
-        fetch('ajax.php', {
+        fetch(endpoint, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -48,7 +48,7 @@ final class CopilotPanelController
                 </div>
                 <div class="card-body py-2">
                     <div id="copilot-log" class="copilot-log" aria-live="polite"></div>
-                    <form id="copilot-form" class="form-inline mt-2" autocomplete="off">
+                    <form id="copilot-form" class="form-inline mt-2" autocomplete="off" data-endpoint="{$base}/public/ajax.php">
                         <input type="hidden" id="copilot-csrf" value="{$token}">
                         <input type="text" id="copilot-input" class="form-control flex-grow-1 mr-2"
                                placeholder="{$placeholder}" aria-label="{$placeholder}">
