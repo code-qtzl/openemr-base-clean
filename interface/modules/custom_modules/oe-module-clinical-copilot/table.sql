@@ -19,6 +19,7 @@ CREATE TABLE `clinical_copilot_log` (
   `model`            VARCHAR(64)      NULL,
   `success`          TINYINT(1)   NOT NULL DEFAULT 0,
   `latency_ms`       INT UNSIGNED     NULL COMMENT 'wall-clock time for CopilotService::ask() to return',
+  `verification_passed` TINYINT(1)   NULL COMMENT 'NULL when the request failed before an answer was verified; see PUNCH_LIST.md 1.3',
   PRIMARY KEY (`id`),
   KEY `pid_asked_at` (`pid`, `asked_at`),
   KEY `correlation_id` (`correlation_id`)
@@ -43,4 +44,13 @@ ALTER TABLE `clinical_copilot_log`
 
 #IfNotIndex clinical_copilot_log correlation_id
 ALTER TABLE `clinical_copilot_log` ADD KEY `correlation_id` (`correlation_id`);
+#EndIf
+
+-- Upgrade path for an install that already created the table before
+-- verification_passed existed (see PUNCH_LIST.md Tier 1.3).
+#IfMissingColumn clinical_copilot_log verification_passed
+ALTER TABLE `clinical_copilot_log`
+  ADD `verification_passed` TINYINT(1) NULL
+      COMMENT 'NULL when the request failed before an answer was verified; see PUNCH_LIST.md 1.3'
+      AFTER `latency_ms`;
 #EndIf

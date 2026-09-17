@@ -98,4 +98,30 @@ class HealthEndpointTest extends TestCase
             $this->assertIsArray($body['checks'], 'checks should be an array');
         }
     }
+
+    /**
+     * PUNCH_LIST.md 1.2: the HTTP status code, not just the JSON body, must
+     * reflect whether every dependency (including the co-pilot's Anthropic
+     * API and Langfuse checks) is healthy -- an orchestrator's readiness
+     * probe only ever looks at the status code.
+     */
+    public function testReadyzHttpStatusMatchesHealthyField(): void
+    {
+        $response = $this->client->get('/meta/health/readyz');
+        $body = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($body);
+
+        if ($body['status'] !== 'ready') {
+            self::markTestSkipped('Instance is not installed; healthy/status-code coupling only applies once installed.');
+        }
+
+        $this->assertArrayHasKey('healthy', $body, 'readyz response should report an overall healthy flag');
+        $this->assertIsBool($body['healthy']);
+
+        if ($body['healthy']) {
+            $this->assertEquals(200, $response->getStatusCode(), 'a healthy instance should return 200');
+        } else {
+            $this->assertEquals(503, $response->getStatusCode(), 'an unhealthy instance should return 503');
+        }
+    }
 }

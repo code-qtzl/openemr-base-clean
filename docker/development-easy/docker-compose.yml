@@ -85,6 +85,10 @@ services:
       # invoked from -- create one here with OPENEMR__COPILOT_API_KEY=... if
       # the co-pilot panel reports "not configured on this server".
       OPENEMR__COPILOT_API_KEY: "${OPENEMR__COPILOT_API_KEY:-}"
+      # Langfuse tracing (PUNCH_LIST.md 1.1): optional -- LangfuseTracer and
+      # LangfuseCheck both no-op until both keys are set. Same .env as above.
+      OPENEMR__LANGFUSE_PUBLIC_KEY: "${OPENEMR__LANGFUSE_PUBLIC_KEY:-}"
+      OPENEMR__LANGFUSE_SECRET_KEY: "${OPENEMR__LANGFUSE_SECRET_KEY:-}"
       OPENEMR_SETTING_site_addr_oath: 'https://localhost:${WT_HTTPS_PORT:-9300}'
       OPENEMR_SETTING_oauth_password_grant: 3
       OPENEMR_SETTING_rest_system_scopes_api: 1

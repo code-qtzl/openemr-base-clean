@@ -41,6 +41,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncounterRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult;
+use Psr\Clock\ClockInterface;
 use RuntimeException;
 
 final class ChartContextTools
@@ -54,12 +55,16 @@ final class ChartContextTools
     /** Audit event name; the handle for filtering co-pilot disclosures. */
     private const AUDIT_EVENT = 'clinical-copilot-tool';
 
+    private readonly ClockInterface $clock;
+
     public function __construct(
         private readonly int $patientId,
         private readonly string $authUser,
         private readonly string $authProvider,
         private readonly string $correlationId,
+        ?ClockInterface $clock = null,
     ) {
+        $this->clock = $clock ?? ServiceContainer::getClock();
     }
 
     /**
@@ -197,7 +202,14 @@ final class ChartContextTools
         return A1cSeriesResult::ok(array_map(self::mapA1cRow(...), $records));
     }
 
-    /** @param array<string, mixed> $row */
+    /**
+     * QueryUtils::fetchRecords() only guarantees `array<mixed>` per row
+     * (array-key, not string) -- this is what array_map's contravariance
+     * check on the callback actually needs to see; the body still indexes
+     * by the string column names the query selects.
+     *
+     * @param array<array-key, mixed> $row
+     */
     private static function mapA1cRow(array $row): A1cResultRow
     {
         return new A1cResultRow(
@@ -231,7 +243,14 @@ final class ChartContextTools
         return ActiveProblemsResult::ok(array_map(self::mapActiveProblemRow(...), $records));
     }
 
-    /** @param array<string, mixed> $row */
+    /**
+     * QueryUtils::fetchRecords() only guarantees `array<mixed>` per row
+     * (array-key, not string) -- this is what array_map's contravariance
+     * check on the callback actually needs to see; the body still indexes
+     * by the string column names the query selects.
+     *
+     * @param array<array-key, mixed> $row
+     */
     private static function mapActiveProblemRow(array $row): ActiveProblemRow
     {
         return new ActiveProblemRow(
@@ -246,12 +265,22 @@ final class ChartContextTools
     private function medications(): MedicationsResult
     {
         try {
+            // `active = 1` alone means "not marked discontinued" -- nothing
+            // clears it just because end_date has since passed (see
+            // AUDIT_Extra.md's Data-Quality Finding 1 and PUNCH_LIST.md
+            // 1.4(a)). Excluding rows with a documented past end_date fixes
+            // the common case (Synthea-seeded rows carrying a real end_date
+            // that active was never flipped off for); MedicationStalenessPolicy
+            // separately flags the remaining case of an open-ended row (no
+            // end_date at all) whose start_date is itself old enough to
+            // doubt.
             $records = QueryUtils::fetchRecords(
                 'SELECT `drug`, `dosage`, `form`, `interval`, `route`, `quantity`,
                         `start_date`, `end_date`
                    FROM `prescriptions`
                   WHERE `patient_id` = ?
                     AND `active` = 1
+                    AND (`end_date` IS NULL OR `end_date` >= CURDATE())
                   ORDER BY `start_date` DESC
                   LIMIT ' . self::MAX_ROWS,
                 [$this->patientId]
@@ -262,12 +291,22 @@ final class ChartContextTools
             return MedicationsResult::failed('Could not retrieve that part of the chart.');
         }
 
-        return MedicationsResult::ok(array_map(self::mapMedicationRow(...), $records));
+        return MedicationsResult::ok(array_map($this->mapMedicationRow(...), $records));
     }
 
-    /** @param array<string, mixed> $row */
-    private static function mapMedicationRow(array $row): MedicationRow
+    /**
+     * QueryUtils::fetchRecords() only guarantees `array<mixed>` per row
+     * (array-key, not string) -- this is what array_map's contravariance
+     * check on the callback actually needs to see; the body still indexes
+     * by the string column names the query selects.
+     *
+     * @param array<array-key, mixed> $row
+     */
+    private function mapMedicationRow(array $row): MedicationRow
     {
+        $startDate = self::nullableString($row['start_date'] ?? null);
+        $endDate = self::nullableString($row['end_date'] ?? null);
+
         return new MedicationRow(
             drug: self::nullableString($row['drug'] ?? null),
             dosage: self::nullableString($row['dosage'] ?? null),
@@ -275,8 +314,9 @@ final class ChartContextTools
             interval: self::nullableString($row['interval'] ?? null),
             route: self::nullableString($row['route'] ?? null),
             quantity: self::nullableString($row['quantity'] ?? null),
-            startDate: self::nullableString($row['start_date'] ?? null),
-            endDate: self::nullableString($row['end_date'] ?? null),
+            startDate: $startDate,
+            endDate: $endDate,
+            staleWarning: MedicationStalenessPolicy::warningFor($startDate, $endDate, $this->clock->now()),
         );
     }
 
@@ -300,7 +340,14 @@ final class ChartContextTools
         return RecentEncountersResult::ok(array_map(self::mapRecentEncounterRow(...), $records));
     }
 
-    /** @param array<string, mixed> $row */
+    /**
+     * QueryUtils::fetchRecords() only guarantees `array<mixed>` per row
+     * (array-key, not string) -- this is what array_map's contravariance
+     * check on the callback actually needs to see; the body still indexes
+     * by the string column names the query selects.
+     *
+     * @param array<array-key, mixed> $row
+     */
     private static function mapRecentEncounterRow(array $row): RecentEncounterRow
     {
         return new RecentEncounterRow(

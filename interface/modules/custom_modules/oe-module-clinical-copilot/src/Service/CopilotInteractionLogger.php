@@ -39,8 +39,20 @@ final class CopilotInteractionLogger
         array $toolsUsed,
         string $model,
         int $latencyMs,
+        bool $verificationPassed,
     ): void {
-        $this->insert($correlationId, $patientId, $user, $question, $reply, $toolsUsed, $model, true, $latencyMs);
+        $this->insert(
+            $correlationId,
+            $patientId,
+            $user,
+            $question,
+            $reply,
+            $toolsUsed,
+            $model,
+            true,
+            $latencyMs,
+            $verificationPassed,
+        );
     }
 
     public function logFailure(
@@ -51,7 +63,11 @@ final class CopilotInteractionLogger
         string $model,
         int $latencyMs,
     ): void {
-        $this->insert($correlationId, $patientId, $user, $question, null, [], $model, false, $latencyMs);
+        // A request that never produced an answer has nothing to have
+        // verified -- null, not false, so it reads as "not applicable"
+        // rather than "failed verification" in PUNCH_LIST.md 3.3's
+        // eventual pass/fail-rate dashboard.
+        $this->insert($correlationId, $patientId, $user, $question, null, [], $model, false, $latencyMs, null);
     }
 
     /** @param list<string> $toolsUsed */
@@ -65,13 +81,14 @@ final class CopilotInteractionLogger
         string $model,
         bool $success,
         int $latencyMs,
+        ?bool $verificationPassed,
     ): void {
         try {
             QueryUtils::sqlInsert(
                 'INSERT INTO `clinical_copilot_log`
                     (`correlation_id`, `pid`, `user`, `asked_at`, `question`, `reply`,
-                     `tools_used`, `model`, `success`, `latency_ms`)
-                 VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?)',
+                     `tools_used`, `model`, `success`, `latency_ms`, `verification_passed`)
+                 VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)',
                 [
                     $correlationId,
                     $patientId,
@@ -82,6 +99,7 @@ final class CopilotInteractionLogger
                     $model,
                     $success ? 1 : 0,
                     $latencyMs,
+                    $verificationPassed === null ? null : ($verificationPassed ? 1 : 0),
                 ],
             );
         } catch (SqlQueryException $e) {

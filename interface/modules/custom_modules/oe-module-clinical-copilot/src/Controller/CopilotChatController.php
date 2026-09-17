@@ -41,6 +41,7 @@ use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -52,6 +53,7 @@ final class CopilotChatController
 
     public function __construct(
         private readonly CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
+        private readonly LangfuseTracer $tracer = new LangfuseTracer(),
     ) {
     }
 
@@ -99,22 +101,44 @@ final class CopilotChatController
             );
 
             $result = (new CopilotService($tools))->ask($question, $correlationId);
+            $endedAt = microtime(true);
+
+            $this->tracer->traceAsk(
+                $correlationId,
+                $patientId,
+                $authUser,
+                CopilotService::model(),
+                $question,
+                $result,
+                $startedAt,
+                $endedAt,
+            );
 
             $this->interactionLogger->logSuccess(
                 $correlationId,
                 $patientId,
                 $authUser,
                 $question,
-                $result['reply'],
-                $result['toolsUsed'],
+                $result->reply,
+                $result->toolsUsed,
                 CopilotService::model(),
                 self::elapsedMs($startedAt),
+                $result->verificationPassed,
             );
 
+            if (!$result->verificationPassed) {
+                ServiceContainer::getLogger()->warning('Clinical Co-Pilot answer failed verification', [
+                    'correlationId' => $correlationId,
+                    'pid' => $patientId,
+                    'reason' => $result->verificationReason,
+                ]);
+            }
+
             return new JsonResponse([
-                'reply' => $result['reply'],
-                'toolsUsed' => $result['toolsUsed'],
+                'reply' => $result->reply,
+                'toolsUsed' => $result->toolsUsed,
                 'correlationId' => $correlationId,
+                'verificationPassed' => $result->verificationPassed,
             ]);
         } catch (AnthropicException | SqlQueryException | RuntimeException | JsonException $e) {
             // Exception messages can carry API detail, prompt content or SQL.

@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS `clinical_copilot_log` (
   `model`          VARCHAR(64)      NULL,
   `success`        TINYINT(1)   NOT NULL DEFAULT 0,
   `latency_ms`     INT UNSIGNED     NULL,
+  `verification_passed` TINYINT(1) NULL,
   PRIMARY KEY (`id`),
   KEY `pid_asked_at` (`pid`, `asked_at`),
   KEY `correlation_id` (`correlation_id`)
@@ -238,7 +239,8 @@ CREATE TABLE IF NOT EXISTS `clinical_copilot_log` (
 -- fresh CREATE TABLE above already has both, so this is a no-op there.
 ALTER TABLE `clinical_copilot_log`
   ADD COLUMN IF NOT EXISTS `correlation_id` VARCHAR(36) NULL AFTER `id`,
-  ADD COLUMN IF NOT EXISTS `latency_ms` INT UNSIGNED NULL AFTER `success`;
+  ADD COLUMN IF NOT EXISTS `latency_ms` INT UNSIGNED NULL AFTER `success`,
+  ADD COLUMN IF NOT EXISTS `verification_passed` TINYINT(1) NULL AFTER `latency_ms`;
 
 INSERT INTO `modules`
     (`mod_name`, `mod_directory`, `mod_parent`, `mod_type`, `mod_active`,

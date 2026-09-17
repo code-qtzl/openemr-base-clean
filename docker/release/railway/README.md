@@ -62,6 +62,16 @@ Then set the two secrets in the dashboard (not on a command line):
   falling back to the `pass` default baked into `openemr.sh`.
 - `OPENEMR__COPILOT_API_KEY` — Anthropic API key for the co-pilot.
 
+Optional, for Langfuse tracing (PUNCH_LIST.md 1.1) -- both LangfuseTracer and
+LangfuseCheck (the `/meta/health/readyz` dependency check) no-op until both
+are set, so the co-pilot works the same without them:
+
+- `OPENEMR__LANGFUSE_PUBLIC_KEY` / `OPENEMR__LANGFUSE_SECRET_KEY` — from a
+  Langfuse Cloud project (standard `us.cloud.langfuse.com` region -- this
+  fork only sends synthetic Synthea data through the co-pilot, so the
+  HIPAA-BAA region and its higher plan tier are not needed; see the
+  "LangFuse region decision" note in project memory before changing that).
+
 Leave `OE_PASS` unset. Prefer a **MariaDB** service: the dump carries the
 MariaDB-only `/*M!999999 ... */` sandbox sentinel and is untested on MySQL 8.
 

@@ -65,9 +65,13 @@ try {
             $sessionAllowWrite = true;
             require_once __DIR__ . "/../../interface/globals.php";
 
-            // Run full health checks
+            // Run full health checks. A non-2xx status here is what actually
+            // makes an orchestrator (k8s, Railway, ...) treat the instance as
+            // not ready -- the JSON body's `status`/`healthy` fields alone
+            // are not enough, since a probe checks the HTTP status code.
             $checker = new HealthChecker();
-            $response = new JsonResponse($checker->getResultsArray());
+            $results = $checker->getResultsArray();
+            $response = new JsonResponse($results, $results['healthy'] ? Response::HTTP_OK : Response::HTTP_SERVICE_UNAVAILABLE);
         } else {
             // Not installed - return minimal response
             $response = new JsonResponse([

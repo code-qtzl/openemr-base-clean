@@ -46,10 +46,37 @@ class MedicationsResultTest extends TestCase
                     'quantity' => '60',
                     'start_date' => '2024-01-10',
                     'end_date' => null,
+                    'stale_warning' => null,
                 ],
             ],
             'error' => null,
         ], $result->toArray());
+    }
+
+    public function testStaleWarningIsCarriedThroughToArray(): void
+    {
+        // PUNCH_LIST.md 1.4(a): a decades-old, open-ended "active" row must
+        // surface its staleness warning to the model, not just the raw dates.
+        $rows = [
+            new MedicationRow(
+                'Aspirin',
+                '81mg',
+                'tablet',
+                'QD',
+                'oral',
+                '30',
+                '1948-06-01',
+                null,
+                'Started 78 year(s) ago with no end date recorded -- confirm this is still current before relying on it.',
+            ),
+        ];
+
+        $result = MedicationsResult::ok($rows);
+
+        self::assertSame(
+            'Started 78 year(s) ago with no end date recorded -- confirm this is still current before relying on it.',
+            $result->toArray()['rows'][0]['stale_warning'],
+        );
     }
 
     public function testEmptyMedicationListIsDistinctFromFailure(): void
