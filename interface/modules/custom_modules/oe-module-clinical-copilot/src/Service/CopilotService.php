@@ -31,7 +31,6 @@ declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service;
 
-use Anthropic\Client;
 use Anthropic\Lib\Tools\BetaRunnableTool;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
@@ -48,13 +47,6 @@ final class CopilotService
 
     /** Tool name the model must call to give its final, cited answer -- see class docblock. */
     private const SUBMIT_ANSWER_TOOL = 'submit_answer';
-
-    /**
-     * Outbound header carrying the request's correlation id on every call to
-     * the Anthropic API, so a trace can be tied back to a specific request
-     * from either side (this application's logs, or Anthropic's own).
-     */
-    private const CORRELATION_HEADER = 'X-Correlation-Id';
 
     private const SYSTEM_PROMPT = <<<'PROMPT'
         You are a clinical co-pilot embedded in an electronic health record, assisting a
@@ -79,8 +71,10 @@ final class CopilotService
           the chart-reading tool call that supports it.
         PROMPT;
 
-    public function __construct(private readonly ChartContextTools $tools)
-    {
+    public function __construct(
+        private readonly ChartContextTools $tools,
+        private readonly AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
+    ) {
     }
 
     /**
@@ -161,10 +155,7 @@ final class CopilotService
             },
         );
 
-        $client = new Client(
-            apiKey: $apiKey,
-            requestOptions: ['extraHeaders' => [self::CORRELATION_HEADER => $correlationId]],
-        );
+        $client = $this->clientFactory->create($apiKey, $correlationId);
 
         $runner = $client->beta->messages->toolRunner(
             maxTokens: self::MAX_TOKENS,

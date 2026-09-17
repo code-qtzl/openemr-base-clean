@@ -1,0 +1,43 @@
+meta {
+  name: Readyz
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/meta/health/readyz
+  body: none
+  auth: none
+}
+
+assert {
+  res.body.status: in ready,setup_required,error
+  res.body.healthy: isBoolean
+}
+
+script:post-response {
+  // readyz's own HTTP status reflects dependency health, so PUNCH_LIST.md
+  // Tier 1.2 makes it non-200 when a dependency is down. Only the JSON
+  // status field is a hard "did the endpoint work at all" pass/fail signal
+  // here; a non-200 with a well-formed body means a dependency is
+  // unhealthy, not that the endpoint itself is broken.
+  if (res.status !== 200 && res.status !== 503) {
+    throw new Error(`Unexpected readyz status code: ${res.status} (expected 200 or 503)`);
+  }
+}
+
+docs {
+  Full dependency health check -- verified against a running instance:
+  {"status":"setup_required","healthy":true,"checks":{"installed":false,
+  "database":true,"filesystem":true,"session":true,"oauth_keys":true,
+  "cache":true,"anthropic_api":true,"langfuse":true}}
+
+  "setup_required" here (despite a working, logged-in install) is a known,
+  documented limitation of the installed-flag check post-bootstrap, not a
+  co-pilot bug -- see the "checks.installed" key and the project's
+  config-global-collision-bug note; it does not affect the reliability of
+  the other checks (anthropic_api, langfuse, database, etc.), which is what
+  this probe exists to surface. The HTTP status code is 200 when healthy
+  and drops below 300 only when a real dependency (DB, Anthropic API,
+  Langfuse) is actually down.
+}

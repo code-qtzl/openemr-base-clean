@@ -1,0 +1,40 @@
+meta {
+  name: Login
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/interface/main/main_screen.php?auth=login&site=default
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  authUser: {{username}}
+  clearPass: {{password}}
+  new_login_session_management: 1
+  languageChoice: 1
+}
+
+assert {
+  res.status: lt 400
+  res.body: notContains login_screen.php?error=1
+}
+
+docs {
+  Verified against a running instance: a successful login responds 302,
+  redirecting to /interface/main/tabs/main.php?token_main=... A failed
+  login (bad credentials) instead responds 200 with a small JS snippet that
+  redirects the browser to /interface/login_screen.php?error=1 -- since
+  both a successful login (when a client follows the redirect, as Bruno's
+  CLI runner does by default) and a failed one (which is never a redirect
+  at all) can return HTTP 200, the status code alone cannot distinguish
+  them. The notContains assertion above is what actually catches bad
+  credentials in this environment; the status check only guards against an
+  outright server error.
+
+  Bruno's cookie jar keeps the session cookie ("OpenEMR") this sets for
+  every later request in the collection automatically -- no manual cookie
+  handling needed.
+}

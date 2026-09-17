@@ -1,0 +1,41 @@
+meta {
+  name: Unauthorized session
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/interface/modules/custom_modules/oe-module-clinical-copilot/public/ajax.php
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  csrf_token: not-a-real-token
+  question: What active problems does this patient have?
+}
+
+assert {
+  res.status: eq 403
+  res.body.error: eq Session expired. Reload the page and try again.
+}
+
+docs {
+  "Unauthorized user" variant, verified against a running instance: a
+  request carrying a CSRF token that does not match the logged-in session's
+  key -- the same failure shape a stale/expired session or a request replayed
+  outside its originating session produces -- is rejected before ACL,
+  patient scoping, or any co-pilot work runs:
+  {"error":"Session expired. Reload the page and try again.","correlationId":"..."}
+
+  This collection intentionally does not assume a second, ACL-restricted
+  user account exists in every environment this runs against (local docker
+  vs. Railway may seed different demo users) -- an invalid CSRF token
+  against the real logged-in session is a portable way to exercise the same
+  controller-level rejection path (CopilotChatController::buildResponse()'s
+  CSRF check, which runs before its ACL check) without depending on
+  environment-specific user data. If this environment does have a second,
+  intentionally unprivileged user, logging in as that user instead and
+  reusing this same request is an equally valid way to exercise the ACL
+  check specifically.
+}

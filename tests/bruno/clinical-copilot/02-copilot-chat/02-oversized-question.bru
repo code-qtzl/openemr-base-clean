@@ -1,0 +1,31 @@
+meta {
+  name: Oversized question
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/interface/modules/custom_modules/oe-module-clinical-copilot/public/ajax.php
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  csrf_token: {{copilotCsrfToken}}
+  question: {{oversizedQuestion}}
+}
+
+script:pre-request {
+  bru.setVar("oversizedQuestion", "a".repeat(2001));
+}
+
+assert {
+  res.status: eq 400
+  res.body.error: eq Question is too long.
+}
+
+docs {
+  A question over CopilotChatController::MAX_QUESTION_LENGTH (2000 chars)
+  is rejected before any tool/Anthropic work happens -- verified against a
+  running instance: {"error":"Question is too long.","correlationId":"..."}
+}

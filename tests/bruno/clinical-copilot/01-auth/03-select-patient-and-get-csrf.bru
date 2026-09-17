@@ -1,0 +1,42 @@
+meta {
+  name: Select patient and get co-pilot CSRF token
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/interface/patient_file/summary/demographics.php?set_pid={{patientId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  const body = res.getBody();
+  const html = typeof body === "string" ? body : String(body);
+  const match = html.match(/id="copilot-csrf"\s+value="([^"]+)"/);
+  if (!match) {
+    throw new Error(
+      "Could not find the co-pilot's CSRF token in the demographics page. " +
+      "Confirm login succeeded, patientId is a real patient, and the " +
+      "Clinical Co-Pilot module is enabled."
+    );
+  }
+  bru.setVar("copilotCsrfToken", match[1]);
+}
+
+docs {
+  Loading a patient's chart both sets $_SESSION['pid'] (the ?set_pid=
+  query param -- this is how OpenEMR's own UI selects a patient; see
+  interface/main/finder/patient_select.php) and renders the Clinical
+  Co-Pilot chat panel, which embeds a CSRF token scoped to this session
+  (<input id="copilot-csrf">). The post-response script above extracts it
+  into the copilotCsrfToken variable the requests in 02-copilot-chat/ use.
+
+  patientId defaults to 1 (the standard OpenEMR demo patient present in a
+  fresh install). Point it at a real patient pid in this environment if 1
+  does not exist.
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Livez
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/meta/health/livez
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq alive
+}
+
+docs {
+  Minimal liveness probe -- verified against a running instance:
+  {"status":"alive"}. No authentication, no database.
+}

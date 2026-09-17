@@ -1,0 +1,42 @@
+meta {
+  name: Happy path
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/interface/modules/custom_modules/oe-module-clinical-copilot/public/ajax.php
+  body: formUrlEncoded
+  auth: none
+}
+
+body:form-urlencoded {
+  csrf_token: {{copilotCsrfToken}}
+  question: What active problems does this patient have?
+}
+
+assert {
+  res.status: eq 200
+  res.body.reply: isString
+  res.body.toolsUsed: isArray
+  res.body.correlationId: isString
+  res.body.verificationPassed: isBoolean
+}
+
+docs {
+  Success response contract, verified against a running instance:
+
+    {
+      "reply": "...",
+      "toolsUsed": ["get_active_problems"],
+      "correlationId": "...",
+      "verificationPassed": true
+    }
+
+  verificationPassed can legitimately be false (the co-pilot's verification
+  layer rejected an uncited/hallucinated claim and substituted the safe
+  fallback reply) without the request itself failing -- that is a 200 with
+  a fallback reply, not an error. This request only asserts the response
+  SHAPE, not verificationPassed's value, since real model output is not
+  deterministic between runs.
+}

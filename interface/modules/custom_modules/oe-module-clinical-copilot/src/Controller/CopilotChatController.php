@@ -38,9 +38,11 @@ use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Modules\ClinicalCopilot\Service\AnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
+use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
@@ -54,6 +56,7 @@ final class CopilotChatController
     public function __construct(
         private readonly CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
         private readonly LangfuseTracer $tracer = new LangfuseTracer(),
+        private readonly AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
     ) {
     }
 
@@ -100,7 +103,7 @@ final class CopilotChatController
                 $correlationId,
             );
 
-            $result = (new CopilotService($tools))->ask($question, $correlationId);
+            $result = (new CopilotService($tools, $this->clientFactory))->ask($question, $correlationId);
             $endedAt = microtime(true);
 
             $this->tracer->traceAsk(

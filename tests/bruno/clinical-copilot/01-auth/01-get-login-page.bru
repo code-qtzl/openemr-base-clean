@@ -1,0 +1,21 @@
+meta {
+  name: Get login page
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/interface/login/login.php?site=default
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Establishes the pre-login session cookie. OpenEMR's login form has no CSRF
+  field (a session key does not exist yet at this point), so this step just
+  needs to succeed with 200 before Login below.
+}
