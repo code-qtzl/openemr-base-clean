@@ -1,6 +1,14 @@
 vars {
-  baseUrl: https://REPLACE-WITH-RAILWAY-URL
+  baseUrl: https://openemr-production-a819.up.railway.app
   username: admin
   password: pass
   patientId: 1
+}
+
+docs {
+  password here is a placeholder, not the real credential: docker/release/railway/harden.php
+  rotates the admin password away from the default admin/pass on every boot (this deployment
+  is publicly reachable, see that file's docblock and its README), driven by the
+  OE_ADMIN_PASSWORD Railway service variable. Set this environment's password to that value
+  locally before running against Railway -- do not commit the real value here.
 }

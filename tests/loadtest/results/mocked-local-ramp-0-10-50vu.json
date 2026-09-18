@@ -1,0 +1,154 @@
+{
+    "root_group": {
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {},
+        "checks": {
+                "status is 200": {
+                    "id": "6210a8cd14cd70477eba5c5e4cb3fb5f",
+                    "passes": 772,
+                    "fails": 10,
+                    "name": "status is 200",
+                    "path": "::status is 200"
+                },
+                "has reply": {
+                    "passes": 772,
+                    "fails": 10,
+                    "name": "has reply",
+                    "path": "::has reply",
+                    "id": "02137d3e89c793b3f5761a56ed96d6aa"
+                }
+            },
+        "name": "",
+        "path": ""
+    },
+    "metrics": {
+        "data_received": {
+            "count": 197504715,
+            "rate": 785007.7442245567
+        },
+        "iteration_duration": {
+            "avg": 8556.058701500615,
+            "min": 1175.347416,
+            "med": 11111.844667,
+            "max": 13754.262125,
+            "p(90)": 12487.711925,
+            "p(95)": 12732.3564744
+        },
+        "iterations": {
+            "count": 823,
+            "rate": 3.271118735047972
+        },
+        "http_req_receiving": {
+            "med": 4.0975,
+            "max": 5691.402,
+            "p(90)": 3727.1266,
+            "p(95)": 4402.22635,
+            "avg": 869.4397324649308,
+            "min": 0.036
+        },
+        "copilot_chat_errors": {
+            "passes": 51,
+            "fails": 772,
+            "thresholds": {
+                "rate<0.9": false
+            },
+            "value": 0.061968408262454436
+        },
+        "http_req_sending": {
+            "avg": 0.026376503006012374,
+            "min": 0.005,
+            "med": 0.02,
+            "max": 2.025,
+            "p(90)": 0.042,
+            "p(95)": 0.053
+        },
+        "data_sent": {
+            "count": 1046844,
+            "rate": 4160.8153354466085
+        },
+        "vus_max": {
+            "value": 50,
+            "min": 50,
+            "max": 50
+        },
+        "http_req_connecting": {
+            "max": 0.936,
+            "p(90)": 0.193,
+            "p(95)": 0.207,
+            "avg": 0.041131763527054076,
+            "min": 0,
+            "med": 0
+        },
+        "http_reqs": {
+            "rate": 15.86671444752309,
+            "count": 3992
+        },
+        "http_req_duration": {
+            "p(90)": 5158.8138,
+            "p(95)": 6164.98715,
+            "avg": 1556.2835894288582,
+            "min": 116.709,
+            "med": 777.6945000000001,
+            "max": 7197.693
+        },
+        "vus": {
+            "value": 2,
+            "min": 0,
+            "max": 50
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(95)": 6173.988,
+            "avg": 1570.9231842172046,
+            "min": 116.709,
+            "med": 785.002,
+            "max": 7197.693,
+            "p(90)": 5213.568
+        },
+        "http_req_blocked": {
+            "avg": 0.06193311623246255,
+            "min": 0.001,
+            "med": 0.004,
+            "max": 6.096,
+            "p(90)": 0.257,
+            "p(95)": 0.278
+        },
+        "http_req_failed": {
+            "passes": 51,
+            "fails": 3941,
+            "value": 0.01277555110220441
+        },
+        "copilot_chat_duration": {
+            "p(95)": 971.9359499999998,
+            "avg": 521.0711649616364,
+            "min": 116.709,
+            "med": 577.8495,
+            "max": 1443.233,
+            "p(90)": 828.0245
+        },
+        "http_req_tls_handshaking": {
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0
+        },
+        "http_req_waiting": {
+            "med": 636.2745,
+            "max": 2596.336,
+            "p(90)": 1366.5598,
+            "p(95)": 1578.6667499999996,
+            "avg": 686.8174804609231,
+            "min": 87.648
+        },
+        "session_setup_errors": {
+            "count": 41,
+            "rate": 0.16295974257225618
+        },
+        "checks": {
+            "passes": 1544,
+            "fails": 20,
+            "value": 0.9872122762148338
+        }
+    }
+}

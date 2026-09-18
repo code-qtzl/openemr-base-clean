@@ -89,6 +89,13 @@ services:
       # LangfuseCheck both no-op until both keys are set. Same .env as above.
       OPENEMR__LANGFUSE_PUBLIC_KEY: "${OPENEMR__LANGFUSE_PUBLIC_KEY:-}"
       OPENEMR__LANGFUSE_SECRET_KEY: "${OPENEMR__LANGFUSE_SECRET_KEY:-}"
+      # Load testing only (PUNCH_LIST.md 3.2, tests/loadtest/): the Anthropic PHP
+      # SDK reads this directly (vendor/anthropic-ai/sdk/src/Client.php) when no
+      # explicit baseUrl is passed, so setting it in .env redirects the real
+      # running app at tests/loadtest/mock-anthropic-stub.php with no application
+      # code changes. Empty by default -- normal interactive use hits the real
+      # Anthropic API untouched. See tests/loadtest/README.md before setting this.
+      ANTHROPIC_BASE_URL: "${ANTHROPIC_BASE_URL:-}"
       OPENEMR_SETTING_site_addr_oath: 'https://localhost:${WT_HTTPS_PORT:-9300}'
       OPENEMR_SETTING_oauth_password_grant: 3
       OPENEMR_SETTING_rest_system_scopes_api: 1

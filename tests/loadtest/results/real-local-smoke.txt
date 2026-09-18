@@ -1,0 +1,348 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: tests/loadtest/k6-copilot-chat.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 1 max VUs, 5m30s max duration (incl. graceful stop):
+              * smoke: 6 iterations for each of 1 VUs (maxDuration: 5m0s, gracefulStop: 30s)
+
+
+running (0m01.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m01.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m02.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m02.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m03.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m03.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m04.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m04.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m05.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m05.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m06.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m06.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m07.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m07.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m08.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m08.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m09.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m09.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m10.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m10.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m11.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m11.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m12.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m12.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m13.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m13.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m14.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m14.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m15.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m15.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m16.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m16.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m17.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m17.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m18.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m18.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m19.0s), 1/1 VUs, 0 complete and 0 interrupted iterations
+smoke   [   0% ] 1 VUs  0m19.0s/5m0s  0/6 iters, 6 per VU
+
+running (0m20.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m20.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m21.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m21.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m22.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m22.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m23.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m23.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m24.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m24.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m25.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m25.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m26.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m26.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m27.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m27.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m28.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m28.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m29.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m29.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m30.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m30.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m31.0s), 1/1 VUs, 1 complete and 0 interrupted iterations
+smoke   [  17% ] 1 VUs  0m31.0s/5m0s  1/6 iters, 6 per VU
+
+running (0m32.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m32.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m33.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m33.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m34.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m34.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m35.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m35.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m36.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m36.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m37.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m37.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m38.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m38.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m39.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m39.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m40.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m40.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m41.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m41.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m42.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m42.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m43.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m43.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m44.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m44.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m45.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m45.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m46.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m46.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m47.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m47.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m48.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m48.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m49.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m49.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m50.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m50.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m51.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m51.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m52.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m52.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m53.0s), 1/1 VUs, 2 complete and 0 interrupted iterations
+smoke   [  33% ] 1 VUs  0m53.0s/5m0s  2/6 iters, 6 per VU
+
+running (0m54.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m54.0s/5m0s  3/6 iters, 6 per VU
+
+running (0m55.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m55.0s/5m0s  3/6 iters, 6 per VU
+
+running (0m56.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m56.0s/5m0s  3/6 iters, 6 per VU
+
+running (0m57.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m57.0s/5m0s  3/6 iters, 6 per VU
+
+running (0m58.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m58.0s/5m0s  3/6 iters, 6 per VU
+
+running (0m59.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  0m59.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m00.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m00.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m01.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m01.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m02.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m02.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m03.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m03.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m04.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m04.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m05.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m05.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m06.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m06.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m07.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m07.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m08.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m08.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m09.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m09.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m10.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m10.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m11.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m11.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m12.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m12.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m13.0s), 1/1 VUs, 3 complete and 0 interrupted iterations
+smoke   [  50% ] 1 VUs  1m13.0s/5m0s  3/6 iters, 6 per VU
+
+running (1m14.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m14.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m15.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m15.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m16.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m16.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m17.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m17.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m18.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m18.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m19.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m19.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m20.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m20.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m21.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m21.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m22.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m22.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m23.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m23.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m24.0s), 1/1 VUs, 4 complete and 0 interrupted iterations
+smoke   [  67% ] 1 VUs  1m24.0s/5m0s  4/6 iters, 6 per VU
+
+running (1m25.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m25.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m26.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m26.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m27.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m27.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m28.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m28.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m29.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m29.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m30.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m30.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m31.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m31.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m32.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m32.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m33.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m33.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m34.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m34.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m35.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m35.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m36.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m36.0s/5m0s  5/6 iters, 6 per VU
+
+running (1m37.0s), 1/1 VUs, 5 complete and 0 interrupted iterations
+smoke   [  83% ] 1 VUs  1m37.0s/5m0s  5/6 iters, 6 per VU
+
+
+  █ THRESHOLDS 
+
+    copilot_chat_errors
+    ✓ 'rate<0.5' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 12      0.122842/s
+    checks_succeeded...: 100.00% 12 out of 12
+    checks_failed......: 0.00%   0 out of 12
+
+    ✓ status is 200
+    ✓ has reply
+
+    CUSTOM
+    copilot_chat_duration..........: avg=13.34s min=8.49s    med=13.22s   max=18.95s p(50)=13.22s   p(90)=18.07s p(95)=18.51s p(99)=18.86s
+    copilot_chat_errors............: 0.00%  0 out of 6
+
+    HTTP
+    http_req_duration..............: avg=3.05s  min=195.58ms med=423.13ms max=18.95s p(50)=423.13ms p(90)=10.66s p(95)=16.84s p(99)=18.44s
+      { expected_response:true }...: avg=3.05s  min=195.58ms med=423.13ms max=18.95s p(50)=423.13ms p(90)=10.66s p(95)=16.84s p(99)=18.44s
+    http_req_failed................: 0.00%  0 out of 30
+    http_reqs......................: 30     0.307104/s
+
+    EXECUTION
+    iteration_duration.............: avg=16.28s min=11.5s    med=16.12s   max=21.79s p(50)=16.12s   p(90)=21s    p(95)=21.4s  p(99)=21.71s
+    iterations.....................: 6      0.061421/s
+    vus............................: 1      min=1       max=1
+    vus_max........................: 1      min=1       max=1
+
+    NETWORK
+    data_received..................: 1.5 MB 16 kB/s
+    data_sent......................: 7.9 kB 81 B/s
+
+
+
+
+running (1m37.7s), 0/1 VUs, 6 complete and 0 interrupted iterations
+smoke ✓ [ 100% ] 1 VUs  1m37.7s/5m0s  6/6 iters, 6 per VU
