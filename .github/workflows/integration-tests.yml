@@ -99,6 +99,23 @@ jobs:
     - name: Run PHPUnit
       run: vendor/bin/phpunit ${{ env.COLLECT_COVERAGE == 'true' && '--coverage-text --coverage-clover clover.xml' || '' }} --log-junit junit.xml --testsuite common,controllers,fixtures,validators,unit
 
+    - name: Apply Clinical Co-Pilot module schema
+      # `./cli install` above has no concept of custom modules under
+      # interface/modules/custom_modules/ -- their table.sql files are
+      # normally applied only through the admin UI's module Register/Install
+      # action, which this headless install never performs. Without this,
+      # every test in tests/Tests/Services/Modules/ClinicalCopilot fails
+      # against this freshly installed database with "table doesn't exist".
+      run: php tests/Tests/Fixtures/ClinicalCopilot/apply-schema.php
+
+    - name: Run PHPUnit (Clinical Co-Pilot module)
+      # Not part of the "services" testsuite above -- that suite also
+      # contains pre-existing, unrelated failures elsewhere under
+      # tests/Tests/Services (FHIR/CDA fixtures depending on demo-data state
+      # this workflow's minimal install doesn't provide). Scoped directly to
+      # this module's own test directory instead of widening "services".
+      run: vendor/bin/phpunit --log-junit junit-clinical-copilot.xml tests/Tests/Services/Modules/ClinicalCopilot
+
     - name: Upload coverage
       if: ${{ !cancelled() && env.COLLECT_COVERAGE == 'true' }}
       uses: codecov/codecov-action@v7
