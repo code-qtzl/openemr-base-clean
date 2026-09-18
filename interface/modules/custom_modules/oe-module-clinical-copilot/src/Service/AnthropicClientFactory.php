@@ -31,4 +31,11 @@ interface AnthropicClientFactory
     public const CORRELATION_HEADER = 'X-Correlation-Id';
 
     public function create(string $apiKey, string $correlationId): Client;
+
+    /**
+     * Number of SDK-level retries the most recent create()'d client's calls
+     * made, for PUNCH_LIST.md 3.3's retry-count dashboard metric. 0 until
+     * create() has been called, and after every call that made none.
+     */
+    public function retryCount(): int;
 }

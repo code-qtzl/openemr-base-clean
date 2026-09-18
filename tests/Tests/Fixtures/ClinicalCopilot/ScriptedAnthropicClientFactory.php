@@ -104,6 +104,17 @@ final class ScriptedAnthropicClientFactory implements AnthropicClientFactory
     }
 
     /**
+     * Scripted conversations never retry -- FakeAnthropicTransporter always
+     * succeeds on the first attempt -- so this is always 0. Satisfies
+     * AnthropicClientFactory's interface for PUNCH_LIST.md 3.3's retry-count
+     * metric without needing retry behavior in the test double.
+     */
+    public function retryCount(): int
+    {
+        return 0;
+    }
+
+    /**
      * The transporter behind the most recent create() call -- lets a test
      * inspect every request body sent across that conversation after
      * CopilotService::ask() returns. Null until create() has been called.

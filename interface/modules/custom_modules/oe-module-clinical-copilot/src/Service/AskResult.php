@@ -34,6 +34,9 @@ final readonly class AskResult
      * @param int $inputTokens Total input tokens across every turn of this
      *                         request, for LangfuseTracer's generation span.
      * @param int $outputTokens Total output tokens across every turn.
+     * @param int $retryCount SDK-level retries across every turn of this
+     *                        request (AnthropicClientFactory::retryCount()),
+     *                        for LangfuseTracer -- PUNCH_LIST.md 3.3.
      */
     public function __construct(
         public string $reply,
@@ -43,6 +46,7 @@ final readonly class AskResult
         public array $toolCalls,
         public int $inputTokens,
         public int $outputTokens,
+        public int $retryCount,
     ) {
     }
 }

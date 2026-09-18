@@ -89,6 +89,7 @@ class LangfuseTracerTest extends TestCase
             toolCalls: [new ToolCallSpan('get_medications', 0.1, 0.2, true)],
             inputTokens: 100,
             outputTokens: 50,
+            retryCount: 0,
         );
 
         $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', $result, 0.0, 1.0);
@@ -106,6 +107,36 @@ class LangfuseTracerTest extends TestCase
         self::assertSame($rootSpanId, self::spanAt($spans, 2)['parentSpanId']);
     }
 
+    /**
+     * ALERTS.md's tool-failure-rate alert queries on this level, not on
+     * parsing observation.output -- a failed tool call must be directly
+     * filterable without that.
+     */
+    public function testFailedToolCallSpanIsLeveledErrorSoItsAlertableWithoutParsingOutput(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $result = new AskResult(
+            reply: 'answer',
+            toolsUsed: ['get_medications'],
+            verificationPassed: false,
+            verificationReason: 'tool call failed',
+            toolCalls: [new ToolCallSpan('get_medications', 0.1, 0.2, false)],
+            inputTokens: 0,
+            outputTokens: 0,
+            retryCount: 0,
+        );
+
+        $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', $result, 0.0, 1.0);
+
+        $toolSpan = self::spanAt(self::extractSpans($transporter->captured), 1);
+        $attributes = self::attributesOf($toolSpan);
+
+        self::assertSame('failed', $attributes['langfuse.observation.output']);
+        self::assertSame('ERROR', $attributes['langfuse.observation.level']);
+    }
+
     public function testOmitsGenerationSpanWhenNoTokenUsageIsKnown(): void
     {
         $transporter = self::capturingTransporter();
@@ -118,16 +149,79 @@ class LangfuseTracerTest extends TestCase
         self::assertSame(['clinical-copilot.ask'], array_column($spans, 'name'));
     }
 
-    private static function stubResult(): AskResult
+    /**
+     * PUNCH_LIST.md 3.3: retry count and verification pass/fail must reach
+     * Langfuse's dashboard as a filterable trace tag, not only as metadata
+     * (which the dashboard can't chart/aggregate by) -- see
+     * LangfuseTracer::traceAsk()'s langfuse.trace.tags attribute.
+     */
+    public function testFailedVerificationAndRetriesAreTaggedAndCountedOnTheRootSpan(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $result = self::stubResult(verificationPassed: false, retryCount: 2);
+        $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', $result, 0.0, 1.0);
+
+        $rootAttributes = self::attributesOf(self::spanAt(self::extractSpans($transporter->captured), 0));
+
+        self::assertSame(['verification-failed', 'retried'], $rootAttributes['langfuse.trace.tags']);
+        self::assertSame(2, $rootAttributes['langfuse.trace.metadata.retry_count']);
+    }
+
+    public function testPassedVerificationWithNoRetriesTagsOnlyVerificationPassed(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', self::stubResult(), 0.0, 1.0);
+
+        $rootAttributes = self::attributesOf(self::spanAt(self::extractSpans($transporter->captured), 0));
+
+        self::assertSame(['verification-passed'], $rootAttributes['langfuse.trace.tags']);
+        self::assertSame(0, $rootAttributes['langfuse.trace.metadata.retry_count']);
+    }
+
+    /**
+     * Decodes one span's OTLP attribute list back into a plain
+     * key => value map (arrayValue -> list<string>, the rest scalar),
+     * mirroring LangfuseOtlpPayloadBuilder::anyValue()'s encoding.
+     *
+     * @param array<mixed, mixed> $span
+     * @return array<string, mixed>
+     */
+    private static function attributesOf(array $span): array
+    {
+        $attributes = $span['attributes'] ?? null;
+        self::assertIsArray($attributes);
+
+        $map = [];
+        foreach ($attributes as $attribute) {
+            self::assertIsArray($attribute);
+            $value = $attribute['value'];
+            $map[$attribute['key']] = match (true) {
+                array_key_exists('arrayValue', $value) => array_column($value['arrayValue']['values'], 'stringValue'),
+                array_key_exists('boolValue', $value) => $value['boolValue'],
+                array_key_exists('intValue', $value) => (int) $value['intValue'],
+                array_key_exists('doubleValue', $value) => $value['doubleValue'],
+                default => $value['stringValue'],
+            };
+        }
+
+        return $map;
+    }
+
+    private static function stubResult(bool $verificationPassed = true, int $retryCount = 0): AskResult
     {
         return new AskResult(
             reply: 'answer',
             toolsUsed: [],
-            verificationPassed: true,
+            verificationPassed: $verificationPassed,
             verificationReason: null,
             toolCalls: [],
             inputTokens: 0,
             outputTokens: 0,
+            retryCount: $retryCount,
         );
     }
 

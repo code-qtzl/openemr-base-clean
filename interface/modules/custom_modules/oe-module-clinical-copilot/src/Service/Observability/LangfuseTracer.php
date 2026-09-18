@@ -83,6 +83,14 @@ final class LangfuseTracer
                     'langfuse.trace.metadata.pid' => $patientId,
                     'langfuse.trace.metadata.correlation_id' => $correlationId,
                     'langfuse.trace.metadata.verification_passed' => $result->verificationPassed,
+                    'langfuse.trace.metadata.retry_count' => $result->retryCount,
+                    // Tags (rather than only metadata) so Langfuse's dashboard can
+                    // filter/break down by these -- PUNCH_LIST.md 3.3's verification
+                    // pass/fail rate and retry-count metrics.
+                    'langfuse.trace.tags' => array_values(array_filter([
+                        $result->verificationPassed ? 'verification-passed' : 'verification-failed',
+                        $result->retryCount > 0 ? 'retried' : null,
+                    ])),
                     'langfuse.observation.input' => $question,
                     'langfuse.observation.output' => $result->reply,
                 ],
@@ -99,6 +107,9 @@ final class LangfuseTracer
                 attributes: [
                     'langfuse.observation.type' => 'tool',
                     'langfuse.observation.output' => $toolCall->success ? 'ok' : 'failed',
+                    // ERROR level makes a failed tool call queryable/alertable in Langfuse
+                    // without parsing observation.output -- ALERTS.md's tool-failure-rate alert.
+                    'langfuse.observation.level' => $toolCall->success ? 'DEFAULT' : 'ERROR',
                 ],
             );
         }

@@ -23,7 +23,9 @@ final readonly class Span
      * @param float $startedAt Unix timestamp with fractional seconds, as
      *                         returned by microtime(true).
      * @param float $endedAt Unix timestamp with fractional seconds.
-     * @param array<string, string|bool|int|float> $attributes
+     * @param array<string, string|bool|int|float|list<string>> $attributes A
+     *                                                                      list<string> value (e.g. langfuse.trace.tags)
+     *                                                                      encodes as an OTLP arrayValue of stringValues.
      */
     public function __construct(
         public string $spanId,

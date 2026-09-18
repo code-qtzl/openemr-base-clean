@@ -92,16 +92,24 @@ final class LangfuseOtlpPayloadBuilder
         return (string) (int) round($secondsSinceEpoch * 1_000_000_000);
     }
 
+    /** @param string|bool|int|float|list<string> $value */
     /** @return array{key: string, value: array<string, mixed>} */
-    private static function attribute(string $key, string|bool|int|float $value): array
+    private static function attribute(string $key, string|bool|int|float|array $value): array
     {
         return ['key' => $key, 'value' => self::anyValue($value)];
     }
 
-    /** @return array<string, mixed> */
-    private static function anyValue(string|bool|int|float $value): array
+    /**
+     * @param string|bool|int|float|list<string> $value
+     * @return array<string, mixed>
+     */
+    private static function anyValue(string|bool|int|float|array $value): array
     {
         return match (true) {
+            is_array($value) => ['arrayValue' => ['values' => array_map(
+                static fn (string $item): array => ['stringValue' => $item],
+                $value,
+            )]],
             is_bool($value) => ['boolValue' => $value],
             is_int($value) => ['intValue' => (string) $value],
             is_float($value) => ['doubleValue' => $value],

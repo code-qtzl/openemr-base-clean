@@ -187,6 +187,7 @@ final class CopilotService
             toolCalls: $toolCallSpans,
             inputTokens: $inputTokens,
             outputTokens: $outputTokens,
+            retryCount: $this->clientFactory->retryCount(),
         );
     }
 
