@@ -198,17 +198,42 @@ class LangfuseTracerTest extends TestCase
         $map = [];
         foreach ($attributes as $attribute) {
             self::assertIsArray($attribute);
-            $value = $attribute['value'];
-            $map[$attribute['key']] = match (true) {
-                array_key_exists('arrayValue', $value) => array_column($value['arrayValue']['values'], 'stringValue'),
+            $key = $attribute['key'] ?? null;
+            self::assertIsString($key);
+            $value = $attribute['value'] ?? null;
+            self::assertIsArray($value);
+
+            $intValue = $value['intValue'] ?? null;
+            $map[$key] = match (true) {
+                array_key_exists('arrayValue', $value) => self::decodeArrayValue($value),
                 array_key_exists('boolValue', $value) => $value['boolValue'],
-                array_key_exists('intValue', $value) => (int) $value['intValue'],
+                array_key_exists('intValue', $value) && is_string($intValue) => (int) $intValue,
                 array_key_exists('doubleValue', $value) => $value['doubleValue'],
                 default => $value['stringValue'],
             };
         }
 
         return $map;
+    }
+
+    /**
+     * @param array<mixed, mixed> $value
+     * @return list<string>
+     */
+    private static function decodeArrayValue(array $value): array
+    {
+        $arrayValue = $value['arrayValue'] ?? null;
+        self::assertIsArray($arrayValue);
+        $values = $arrayValue['values'] ?? null;
+        self::assertIsArray($values);
+
+        return array_map(static function (mixed $item): string {
+            self::assertIsArray($item);
+            $stringValue = $item['stringValue'] ?? null;
+            self::assertIsString($stringValue);
+
+            return $stringValue;
+        }, array_values($values));
     }
 
     private static function stubResult(bool $verificationPassed = true, int $retryCount = 0): AskResult

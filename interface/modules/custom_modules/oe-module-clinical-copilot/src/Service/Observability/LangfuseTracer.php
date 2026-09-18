@@ -87,10 +87,10 @@ final class LangfuseTracer
                     // Tags (rather than only metadata) so Langfuse's dashboard can
                     // filter/break down by these -- PUNCH_LIST.md 3.3's verification
                     // pass/fail rate and retry-count metrics.
-                    'langfuse.trace.tags' => array_values(array_filter([
+                    'langfuse.trace.tags' => array_filter([
                         $result->verificationPassed ? 'verification-passed' : 'verification-failed',
                         $result->retryCount > 0 ? 'retried' : null,
-                    ])),
+                    ]),
                     'langfuse.observation.input' => $question,
                     'langfuse.observation.output' => $result->reply,
                 ],
