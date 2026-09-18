@@ -54,3 +54,24 @@ ALTER TABLE `clinical_copilot_log`
       COMMENT 'NULL when the request failed before an answer was verified; see PUNCH_LIST.md 1.3'
       AFTER `latency_ms`;
 #EndIf
+
+-- Multi-turn conversation state (PUNCH_LIST.md Tier 4.1 / ARCHITECTURE.md's
+-- Persistent State Management section). Keyed by session + patient id so a
+-- follow-up question in the same visit resolves against what was just
+-- discussed, and so a different patient opened in the same browser session
+-- never sees another patient's conversation. `last_updated` backs
+-- SqlConversationStore's TTL eviction, mirroring session_tracker's own
+-- inactivity-timeout pattern.
+#IfNotTable clinical_copilot_conversation
+CREATE TABLE `clinical_copilot_conversation` (
+  `id`             BIGINT(20)   NOT NULL AUTO_INCREMENT,
+  `session_uuid`   VARCHAR(36)  NOT NULL COMMENT 'session_tracker.uuid identifying the browser session',
+  `pid`            BIGINT(20)   NOT NULL COMMENT 'patient this conversation is scoped to',
+  `turns_json`     MEDIUMTEXT   NOT NULL COMMENT 'JSON list of {role, content} turns, oldest first',
+  `created_at`     DATETIME     NOT NULL,
+  `last_updated`   DATETIME     NOT NULL COMMENT 'drives TTL eviction; see SqlConversationStore',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_pid` (`session_uuid`, `pid`),
+  KEY `last_updated` (`last_updated`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+#EndIf

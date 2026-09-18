@@ -40,6 +40,11 @@ use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\AnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\Conversation;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\ConversationRole;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\ConversationStore;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\ConversationTurn;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\SqlConversationStore;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
@@ -57,6 +62,7 @@ final class CopilotChatController
         private readonly CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
         private readonly LangfuseTracer $tracer = new LangfuseTracer(),
         private readonly AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
+        private readonly ConversationStore $conversationStore = new SqlConversationStore(),
     ) {
     }
 
@@ -93,6 +99,14 @@ final class CopilotChatController
         }
 
         $authUser = $this->sessionString($session->get('authUser'));
+        // The DB-tracked session identity (OpenEMR\Common\Session\SessionTracker),
+        // not the raw PHP session id -- it already has a durable row keyed to
+        // this browser session, with its own TTL housekeeping, that
+        // SqlConversationStore's eviction mirrors. Empty until
+        // SessionTracker::setupSessionDatabaseTracker() has run for this
+        // session (main_screen.php, on every login) -- in that case,
+        // conversation history is skipped rather than failing the request.
+        $sessionUuid = $this->sessionString($session->get('session_database_uuid'));
         $startedAt = microtime(true);
 
         try {
@@ -103,7 +117,11 @@ final class CopilotChatController
                 $correlationId,
             );
 
-            $result = (new CopilotService($tools, $this->clientFactory))->ask($question, $correlationId);
+            $history = $sessionUuid !== ''
+                ? $this->conversationStore->load($sessionUuid, $patientId)
+                : new Conversation();
+
+            $result = (new CopilotService($tools, $this->clientFactory))->ask($question, $correlationId, $history);
             $endedAt = microtime(true);
 
             $this->tracer->traceAsk(
@@ -135,6 +153,17 @@ final class CopilotChatController
                     'pid' => $patientId,
                     'reason' => $result->verificationReason,
                 ]);
+            }
+
+            if ($sessionUuid !== '') {
+                $this->conversationStore->save(
+                    $sessionUuid,
+                    $patientId,
+                    $history->append(
+                        new ConversationTurn(ConversationRole::User, $question),
+                        new ConversationTurn(ConversationRole::Assistant, $result->reply),
+                    ),
+                );
             }
 
             return new JsonResponse([

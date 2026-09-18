@@ -33,6 +33,7 @@ namespace OpenEMR\Modules\ClinicalCopilot\Service;
 
 use Anthropic\Lib\Tools\BetaRunnableTool;
 use OpenEMR\Core\OEEnvBag;
+use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\Conversation;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
 use RuntimeException;
@@ -108,8 +109,15 @@ final class CopilotService
      * Answer one question: gather chart data through tool calls, capture the
      * model's structured, cited final answer from its submit_answer call,
      * and verify it before returning.
+     *
+     * @param Conversation $history Prior turns of this session/patient's
+     *                              conversation (PUNCH_LIST.md Tier 4.1),
+     *                              prepended to $question so a follow-up
+     *                              resolves against what was just discussed.
+     *                              Empty for the first question of a
+     *                              conversation, or when none is stored.
      */
-    public function ask(string $question, string $correlationId): AskResult
+    public function ask(string $question, string $correlationId, Conversation $history = new Conversation()): AskResult
     {
         $apiKey = self::apiKey();
         if ($apiKey === null) {
@@ -159,7 +167,7 @@ final class CopilotService
 
         $runner = $client->beta->messages->toolRunner(
             maxTokens: self::MAX_TOKENS,
-            messages: [['role' => 'user', 'content' => $question]],
+            messages: [...$history->toMessages(), ['role' => 'user', 'content' => $question]],
             model: self::MODEL,
             tools: $runnableTools,
             maxIterations: self::MAX_ITERATIONS,

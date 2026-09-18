@@ -38,6 +38,7 @@ use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedAnthropicClientFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Ramsey\Uuid\Uuid;
 use ReflectionMethod;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -53,10 +54,13 @@ final class CopilotChatControllerTest extends TestCase
     /** @var list<int> */
     private array $installedPids = [];
 
+    private ?string $testSessionUuid = null;
+
     private mixed $originalPid = null;
     private mixed $originalAuthUser = null;
     private mixed $originalAuthProvider = null;
     private mixed $originalCsrfKey = null;
+    private mixed $originalSessionUuid = null;
 
     protected function setUp(): void
     {
@@ -66,6 +70,7 @@ final class CopilotChatControllerTest extends TestCase
         $this->originalAuthUser = $this->session->get('authUser');
         $this->originalAuthProvider = $this->session->get('authProvider');
         $this->originalCsrfKey = $this->session->get('csrf_private_key');
+        $this->originalSessionUuid = $this->session->get('session_database_uuid');
     }
 
     protected function tearDown(): void
@@ -74,6 +79,13 @@ final class CopilotChatControllerTest extends TestCase
         $this->restoreSessionValue('authUser', $this->originalAuthUser);
         $this->restoreSessionValue('authProvider', $this->originalAuthProvider);
         $this->restoreSessionValue('csrf_private_key', $this->originalCsrfKey);
+        $this->restoreSessionValue('session_database_uuid', $this->originalSessionUuid);
+        if ($this->testSessionUuid !== null) {
+            QueryUtils::sqlStatementThrowException(
+                'DELETE FROM `clinical_copilot_conversation` WHERE `session_uuid` = ?',
+                [$this->testSessionUuid],
+            );
+        }
         $this->fixtures->removeFixtures($this->installedPids);
     }
 
@@ -298,6 +310,101 @@ final class CopilotChatControllerTest extends TestCase
         self::assertSame(1, $this->copilotLogCountFor($pid, success: 1));
     }
 
+    /**
+     * Failure mode guarded against: USERS.md UC2's mid-visit follow-up
+     * ("and how long has that been on the list?") getting no benefit from
+     * what was just discussed -- PUNCH_LIST.md Tier 4.1's core acceptance
+     * criterion. Verified by inspecting the second request's own outbound
+     * body, not just its reply, so this fails if history is dropped even
+     * when the second answer happens to look plausible on its own.
+     */
+    #[Test]
+    public function followUpQuestionInSameSessionAndPatientCarriesPriorTurnForward(): void
+    {
+        $this->installPrimaryAndAuthenticate();
+        $this->useSessionDatabaseUuid();
+
+        $firstFactory = (new ScriptedAnthropicClientFactory())
+            ->submitAnswer(['insufficient_information' => true, 'summary' => 'MARKER-FIRST-REPLY'])
+            ->finalText();
+        $firstResponse = $this->invokeBuildResponse(
+            new CopilotChatController(clientFactory: $firstFactory),
+            Request::create('/ajax.php', 'POST', [
+                'csrf_token' => $this->csrfToken(),
+                'question' => 'MARKER-FIRST-QUESTION',
+            ]),
+        );
+        self::assertSame(200, $firstResponse->getStatusCode());
+        self::assertSame('MARKER-FIRST-REPLY', $this->decode($firstResponse)['reply']);
+
+        $secondFactory = (new ScriptedAnthropicClientFactory())
+            ->submitAnswer(['insufficient_information' => true, 'summary' => 'MARKER-SECOND-REPLY'])
+            ->finalText();
+        $secondResponse = $this->invokeBuildResponse(
+            new CopilotChatController(clientFactory: $secondFactory),
+            Request::create('/ajax.php', 'POST', [
+                'csrf_token' => $this->csrfToken(),
+                'question' => 'MARKER-SECOND-QUESTION',
+            ]),
+        );
+        self::assertSame(200, $secondResponse->getStatusCode());
+
+        $sentBodies = $secondFactory->lastTransporter()?->sentBodies() ?? [];
+        self::assertNotEmpty($sentBodies);
+        self::assertStringContainsString('MARKER-FIRST-QUESTION', $sentBodies[0]);
+        self::assertStringContainsString('MARKER-FIRST-REPLY', $sentBodies[0]);
+        self::assertStringContainsString('MARKER-SECOND-QUESTION', $sentBodies[0]);
+    }
+
+    /**
+     * Failure mode guarded against: PUNCH_LIST.md Tier 4.1's explicit
+     * isolation requirement -- a different patient opened in the same
+     * browser session (same session_database_uuid, e.g. the clinician
+     * closing one chart and opening the next) must never see the prior
+     * patient's conversation history. This is the same secret-leak style
+     * assertion promptInjectionInChartDataNeverLeaksAnotherPatientsData()
+     * uses above, applied to conversation state instead of chart data.
+     */
+    #[Test]
+    public function newPatientInSameSessionNeverSeesPriorPatientsConversation(): void
+    {
+        $this->useSessionDatabaseUuid();
+
+        $this->installPrimaryAndAuthenticate();
+        $firstFactory = (new ScriptedAnthropicClientFactory())
+            ->submitAnswer(['insufficient_information' => true, 'summary' => 'MARKER-PRIMARY-REPLY'])
+            ->finalText();
+        $firstResponse = $this->invokeBuildResponse(
+            new CopilotChatController(clientFactory: $firstFactory),
+            Request::create('/ajax.php', 'POST', [
+                'csrf_token' => $this->csrfToken(),
+                'question' => 'MARKER-PRIMARY-QUESTION',
+            ]),
+        );
+        self::assertSame(200, $firstResponse->getStatusCode());
+
+        $secondaryPid = $this->fixtures->installSecondaryPatient();
+        $this->installedPids[] = $secondaryPid;
+        $this->session->set('pid', $secondaryPid);
+
+        $secondFactory = (new ScriptedAnthropicClientFactory())
+            ->submitAnswer(['insufficient_information' => true, 'summary' => 'MARKER-SECONDARY-REPLY'])
+            ->finalText();
+        $secondResponse = $this->invokeBuildResponse(
+            new CopilotChatController(clientFactory: $secondFactory),
+            Request::create('/ajax.php', 'POST', [
+                'csrf_token' => $this->csrfToken(),
+                'question' => 'MARKER-SECONDARY-QUESTION',
+            ]),
+        );
+        self::assertSame(200, $secondResponse->getStatusCode());
+
+        $sentBodies = $secondFactory->lastTransporter()?->sentBodies() ?? [];
+        self::assertNotEmpty($sentBodies);
+        self::assertStringNotContainsString('MARKER-PRIMARY-QUESTION', $sentBodies[0]);
+        self::assertStringNotContainsString('MARKER-PRIMARY-REPLY', $sentBodies[0]);
+    }
+
     private function installPrimaryAndAuthenticate(): int
     {
         $pid = $this->fixtures->installPrimaryPatient();
@@ -306,6 +413,21 @@ final class CopilotChatControllerTest extends TestCase
         $this->session->set('authUser', $this->adminUsername());
 
         return $pid;
+    }
+
+    /**
+     * Sets a fixed session_database_uuid on the active session, as
+     * OpenEMR\Common\Session\SessionTracker::setupSessionDatabaseTracker()
+     * does on every main_screen.php load -- required for
+     * CopilotChatController to persist/load conversation history at all.
+     */
+    private function useSessionDatabaseUuid(): string
+    {
+        $uuid = Uuid::uuid4()->toString();
+        $this->testSessionUuid = $uuid;
+        $this->session->set('session_database_uuid', $uuid);
+
+        return $uuid;
     }
 
     private function adminUsername(): string
