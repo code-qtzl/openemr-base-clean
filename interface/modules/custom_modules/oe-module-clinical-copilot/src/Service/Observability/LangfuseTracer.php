@@ -31,8 +31,9 @@ use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\AskResult;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
+use Throwable;
 
-final class LangfuseTracer
+final readonly class LangfuseTracer
 {
     /**
      * Standard (non-HIPAA-BAA) US Langfuse Cloud region -- see LangfuseCheck
@@ -45,11 +46,11 @@ final class LangfuseTracer
 
     /** See AnthropicApiCheck's constructor docblock for why these are nullable. */
     public function __construct(
-        private readonly ?string $publicKey = null,
-        private readonly ?string $secretKey = null,
-        private readonly ?string $host = null,
-        private readonly ?string $environment = null,
-        private readonly ?ClientInterface $transporter = null,
+        private ?string $publicKey = null,
+        private ?string $secretKey = null,
+        private ?string $host = null,
+        private ?string $environment = null,
+        private ?ClientInterface $transporter = null,
     ) {
     }
 
@@ -132,6 +133,53 @@ final class LangfuseTracer
         }
 
         $this->send($correlationId, $spans);
+    }
+
+    /**
+     * Traces a request that never produced an AskResult at all --
+     * CopilotChatController's catch block, for a thrown missing-API-key,
+     * Anthropic API, SQL, or JSON error. Without this, a failed request
+     * was previously invisible in Langfuse entirely (only traceAsk()'s
+     * success path ever sent anything), so ALERTS.md's error-rate alert had
+     * no trace data to watch regardless of Langfuse plan tier -- see
+     * PUNCH_LIST_2.md Item 2.
+     *
+     * `level: ERROR` on the root span is what makes this queryable via the
+     * same `Is Root Observation` + `Status` filters PUNCH_LIST.md 3.4's
+     * alerts already use for tool calls -- not the exception's own message,
+     * which can carry API/SQL detail and never leaves this process
+     * (`$exception::class` only, matching CopilotChatController's own
+     * "never expose $e->getMessage()" rule for the browser response).
+     */
+    public function traceFailure(
+        string $correlationId,
+        int $patientId,
+        string $authUser,
+        string $question,
+        Throwable $exception,
+        float $requestStartedAt,
+        float $requestEndedAt,
+    ): void {
+        $this->send($correlationId, [
+            new Span(
+                spanId: Span::newSpanId(),
+                parentSpanId: null,
+                name: 'clinical-copilot.ask',
+                startedAt: $requestStartedAt,
+                endedAt: $requestEndedAt,
+                attributes: [
+                    'langfuse.trace.name' => 'clinical-copilot-chat',
+                    'langfuse.observation.type' => 'span',
+                    'langfuse.observation.level' => 'ERROR',
+                    'langfuse.user.id' => $authUser,
+                    'langfuse.trace.metadata.pid' => $patientId,
+                    'langfuse.trace.metadata.correlation_id' => $correlationId,
+                    'langfuse.trace.tags' => ['request-failed'],
+                    'langfuse.observation.input' => $question,
+                    'langfuse.observation.output' => $exception::class,
+                ],
+            ),
+        ]);
     }
 
     /** @param list<Span> $spans */

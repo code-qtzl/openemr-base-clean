@@ -28,12 +28,15 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/require_module.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/FakeAnthropicTransporter.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ScriptedAnthropicClientFactory.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtureManager.php';
+require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/CapturingHttpTransporter.php';
 
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Controller\CopilotChatController;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
+use OpenEMR\Tests\Fixtures\ClinicalCopilot\CapturingHttpTransporter;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedAnthropicClientFactory;
 use PHPUnit\Framework\Attributes\Test;
@@ -195,6 +198,57 @@ final class CopilotChatControllerTest extends TestCase
             self::assertSame('The co-pilot could not answer that right now.', $body['error']);
             self::assertStringNotContainsString('not configured', $body['error']);
             self::assertSame(0, $this->copilotLogCountFor($pid, success: 1));
+        } finally {
+            if ($hadKey) {
+                $envBag->set(self::API_KEY_NAME, $originalKey);
+            } else {
+                $envBag->remove(self::API_KEY_NAME);
+            }
+        }
+    }
+
+    /**
+     * Failure mode guarded against: PUNCH_LIST_2.md Item 2's tracing gap --
+     * before this fix, a request that threw produced no Langfuse trace at
+     * all (LangfuseTracer::traceAsk() was only ever called from the success
+     * path), so a failed request was invisible on the dashboard and
+     * ALERTS.md's error-rate alert had no trace data to watch. Also proves
+     * the fix doesn't regress the "never leak $e->getMessage()" rule the
+     * browser-facing response already follows -- the trace payload gets the
+     * same generic treatment (exception class name only, not its message).
+     */
+    #[Test]
+    public function exceptionPathStillProducesALangfuseTraceTaggedErrorWithoutLeakingTheExceptionMessage(): void
+    {
+        $this->installPrimaryAndAuthenticate();
+        $token = $this->csrfToken();
+
+        $envBag = OEEnvBag::getInstance();
+        $hadKey = $envBag->has(self::API_KEY_NAME);
+        $originalKey = $envBag->get(self::API_KEY_NAME);
+        $envBag->set(self::API_KEY_NAME, '');
+
+        $transporter = new CapturingHttpTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        try {
+            $request = Request::create('/ajax.php', 'POST', [
+                'csrf_token' => $token,
+                'question' => 'What conditions does this patient have?',
+            ]);
+
+            $response = $this->invokeBuildResponse(new CopilotChatController(tracer: $tracer), $request);
+
+            self::assertSame(500, $response->getStatusCode());
+            self::assertNotNull($transporter->captured, 'a failed request should still produce a Langfuse trace');
+
+            $body = (string) $transporter->captured->getBody();
+            self::assertStringContainsString(
+                '"key":"langfuse.observation.level","value":{"stringValue":"ERROR"}',
+                $body,
+            );
+            self::assertStringContainsString('request-failed', $body);
+            self::assertStringNotContainsString('not configured', $body);
         } finally {
             if ($hadKey) {
                 $envBag->set(self::API_KEY_NAME, $originalKey);

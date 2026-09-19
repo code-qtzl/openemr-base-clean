@@ -54,15 +54,15 @@ use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 
-final class CopilotChatController
+final readonly class CopilotChatController
 {
     private const MAX_QUESTION_LENGTH = 2000;
 
     public function __construct(
-        private readonly CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
-        private readonly LangfuseTracer $tracer = new LangfuseTracer(),
-        private readonly AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
-        private readonly ConversationStore $conversationStore = new SqlConversationStore(),
+        private CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
+        private LangfuseTracer $tracer = new LangfuseTracer(),
+        private AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
+        private ConversationStore $conversationStore = new SqlConversationStore(),
     ) {
     }
 
@@ -173,6 +173,8 @@ final class CopilotChatController
                 'verificationPassed' => $result->verificationPassed,
             ]);
         } catch (AnthropicException | SqlQueryException | RuntimeException | JsonException $e) {
+            $endedAt = microtime(true);
+
             // Exception messages can carry API detail, prompt content or SQL.
             // Log with PSR-3 context; return something generic to the browser.
             ServiceContainer::getLogger()->error('Clinical Co-Pilot request failed', [
@@ -189,6 +191,8 @@ final class CopilotChatController
                 CopilotService::model(),
                 self::elapsedMs($startedAt),
             );
+
+            $this->tracer->traceFailure($correlationId, $patientId, $authUser, $question, $e, $startedAt, $endedAt);
 
             return $this->error(xl('The co-pilot could not answer that right now.'), 500, $correlationId);
         }

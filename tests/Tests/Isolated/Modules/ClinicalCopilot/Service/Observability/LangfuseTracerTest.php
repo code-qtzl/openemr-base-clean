@@ -20,6 +20,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use RuntimeException;
 
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/AskResult.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/Span.php';
@@ -180,6 +181,57 @@ class LangfuseTracerTest extends TestCase
 
         self::assertSame(['verification-passed'], $rootAttributes['langfuse.trace.tags']);
         self::assertSame(0, $rootAttributes['langfuse.trace.metadata.retry_count']);
+    }
+
+    /**
+     * Failure mode guarded against: PUNCH_LIST_2.md Item 2's tracing gap --
+     * before traceFailure() existed, a request that threw produced no
+     * Langfuse trace at all (only traceAsk()'s success path ever sent
+     * anything), so ALERTS.md's error-rate alert had no trace data to
+     * watch. `level: ERROR` on the single root span is what makes this
+     * queryable via the same `Is Root Observation` + `Status` filters the
+     * live p95-latency and tool-failure-rate alerts already use.
+     */
+    public function testTraceFailureSendsOneErrorLeveledRootSpan(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceFailure('c1', 27, 'admin', 'q', new RuntimeException('irrelevant'), 0.0, 1.0);
+
+        $spans = self::extractSpans($transporter->captured);
+        self::assertSame(['clinical-copilot.ask'], array_column($spans, 'name'));
+
+        $rootAttributes = self::attributesOf(self::spanAt($spans, 0));
+        self::assertSame('ERROR', $rootAttributes['langfuse.observation.level']);
+        self::assertSame(['request-failed'], $rootAttributes['langfuse.trace.tags']);
+    }
+
+    /**
+     * Failure mode guarded against: exception messages can carry internal
+     * detail (SQL, file paths) -- the same "never expose $e->getMessage()"
+     * rule CopilotChatController's browser-facing response already follows
+     * must hold for the trace payload too. Only the exception's class name
+     * is safe to send.
+     */
+    public function testTraceFailureNeverSendsTheExceptionsOwnMessage(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceFailure(
+            'c1',
+            27,
+            'admin',
+            'q',
+            new RuntimeException('SELECT * FROM users WHERE password_hash = \'leaked\''),
+            0.0,
+            1.0,
+        );
+
+        $rootAttributes = self::attributesOf(self::spanAt(self::extractSpans($transporter->captured), 0));
+        self::assertSame('RuntimeException', $rootAttributes['langfuse.observation.output']);
+        self::assertStringNotContainsString('leaked', (string) json_encode($rootAttributes));
     }
 
     /**
