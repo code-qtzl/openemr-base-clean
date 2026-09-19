@@ -53,8 +53,7 @@ change.
 
 ## Item 2 — Make observability visible through a live dashboard
 
-**Current state: ~90%. Effectively done**, with one clearly-scoped follow-up
-left. This session, in order:
+**Current state: ~98%. Done.** This session, in order:
 1. **Confirmed live**, with screenshots now committed into `KEY_METRICS.md`
    (`docs/images/clinical-copilot/`): trace latency percentiles, and cost/
    token count rendering correctly for `claude-opus-5` — the latter
@@ -73,24 +72,29 @@ left. This session, in order:
    private Slack channel `#az-langfuse-alerts`, visible only to the project
    owner, not a shared team channel). Exact configuration for both is
    documented in `ALERTS.md` next to the trigger/threshold they implement.
-4. **Found a second real bug while wiring the third alert**:
-   `CopilotChatController`'s `catch` block never calls `traceAsk()`, so a
-   request that throws produces *no Langfuse trace at all* today — the
-   error-rate alert has nothing to watch regardless of Langfuse plan tier
-   (which separately caps this account at 2 live alerts anyway). Documented
-   as an explicit, reasoned scope decision in `ALERTS.md`, not left
-   ambiguous.
-- **What's left (the 10%):** the tracing gap found in step 4 — add a
-  failure-path trace in `CopilotChatController`'s `catch` block (root span,
-  `level: ERROR`) so a real error-rate signal exists in Langfuse at all.
-  Optional/deferred by mutual agreement rather than forgotten: even once
-  built, the third alert can't go live without a plan upgrade, so this is
-  now a "close the observability gap for its own sake" task, not a blocker
-  for anything else.
+4. **Found, then closed, a second real bug while wiring the third alert**:
+   `CopilotChatController`'s `catch` block never called `traceAsk()`, so a
+   request that threw produced *no Langfuse trace at all* — invisible on
+   the dashboard even though `clinical_copilot_log` and the PHP error log
+   both correctly recorded it. **Fixed**: `LangfuseTracer::traceFailure()`
+   sends a root span tagged `level: ERROR` (queryable via the same
+   `Is Root Observation` + `Status` filters alerts 1/3 already use), with
+   the exception's class name only — never its message. A new
+   `CopilotChatControllerTest` case captures the raw outgoing OTLP body via
+   a new `CapturingHttpTransporter` fixture and confirms both the `ERROR`
+   tagging and that the exception message never appears in it. 83/83
+   copilot tests pass; zero new PHPStan errors.
+- **What's left (the 2%):** the error-rate alert still isn't live —
+  purely a Langfuse plan-tier limit (2 live alerts on the connected Hobby
+  plan), not a missing-data gap anymore. Documented as an explicit, reasoned
+  scope decision in `ALERTS.md`, not left ambiguous. A same-shape addition
+  to alerts 1/3 whenever the plan allows a third.
 - **Acceptance:** met — `KEY_METRICS.md` embeds real dashboard views with
   real (production-tagged) traffic; `ALERTS.md` states exactly which alerts
-  are live and why the third isn't, rather than leaving it undefined.
-- **Effort remaining:** S (the failure-path tracing fix, if pursued).
+  are live and why the third isn't, rather than leaving it undefined; the
+  trace data that alert needs now genuinely exists.
+- **Effort remaining:** none — only a Langfuse plan upgrade would unblock
+  the third alert, which is a billing decision, not engineering work.
 
 ---
 
@@ -198,10 +202,11 @@ conservative rejection).
    measured cost and scaling table. Only remaining: a measured (not
    estimated) multi-turn figure, and an actual-billed confirmation if that
    precision is wanted.
-2. ~~**Item 2 (live dashboard)**~~ — **done, ~90%**; screenshots committed,
+2. ~~**Item 2 (live dashboard)**~~ — **done, ~98%**; screenshots committed,
    the environment-tagging bug fixed, 2 of 3 alerts live-wired to Slack, and
-   the third's blocker (a real tracing gap, not just a plan limit) found and
-   documented rather than left ambiguous.
+   the third's original blocker (a real tracing gap) found *and closed* —
+   only a Langfuse plan-tier limit remains, a billing decision, not
+   engineering work.
 3. ~~**Item 3 (eval suite)**~~ — **done, ~95%**; the composed test case
    landed.
 4. ~~**Item 4 (API contracts / health)**~~ — **done, ~98%**; readyz fails
@@ -217,6 +222,6 @@ conservative rejection).
 |---|---|---|
 | "full verification layer" | Item 5 | ~85% |
 | "required eval and regression suite" | Item 3 | ~95% |
-| "observability visible through a live dashboard" | Item 2 | ~90% |
+| "observability visible through a live dashboard" | Item 2 | ~98% |
 | "complete the API contracts and health/readiness checks" | Item 4 | ~98% |
 | "document actual AI spend with... scaling projections" | Item 1 | ~90% |

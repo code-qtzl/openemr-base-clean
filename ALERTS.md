@@ -8,8 +8,11 @@ treating these as final production values.
 
 **Status (2026-09-19): 2 of 3 are live**, wired via Langfuse's own
 Automations feature to a private Slack channel (`#az-langfuse-alerts`,
-visible only to the project owner). Alert 2 is documented but not wired --
-see its own section below for why. `PUNCH_LIST_2.md` Item 2 tracks this.
+visible only to the project owner). Alert 2 is documented, and the trace
+data it needs now exists (`LangfuseTracer::traceFailure()`), but it isn't
+wired -- purely a Langfuse plan-tier limit (2 live alerts on the connected
+plan), not a missing-data gap anymore. See its own section below.
+`PUNCH_LIST_2.md` Item 2 tracks this.
 
 ## 1. p95 chat latency > threshold
 
@@ -57,19 +60,17 @@ see its own section below for why. `PUNCH_LIST_2.md` Item 2 tracks this.
   "app is broken" from "a dependency -- DB, Anthropic API, Langfuse -- is
   down," per PUNCH_LIST.md Tier 1.2), then recent deploys, then the
   Anthropic API status page.
-- **Not live, for two independent reasons** (2026-09-19): the connected
-  Langfuse plan (Hobby) caps live alerts at 2, so a choice had to be made --
-  but that cap didn't actually cost anything here, because of the second,
-  more fundamental reason: **`CopilotChatController`'s `catch` block never
-  calls `LangfuseTracer::traceAsk()`.** A request that throws (missing API
-  key, Anthropic API error, SQL error -- exactly the failures this alert is
-  meant to catch) produces *no Langfuse trace at all* today, even though it
-  is still correctly written to `clinical_copilot_log` and the PHP error
-  log. There is currently no trace data in Langfuse for this alert to watch
-  regardless of plan tier. Closing that gap (tracing the failure path with
-  a root span tagged `level: ERROR`) is a real, scoped follow-up, tracked
-  in `PUNCH_LIST_2.md` Item 2 -- once it exists, this alert becomes a
-  same-shape addition to alerts 1/3 above.
+- **Not live, but no longer for a code reason** (updated 2026-09-19): a
+  request that throws (missing API key, Anthropic API error, SQL error)
+  previously produced *no Langfuse trace at all* -- `CopilotChatController`'s
+  `catch` block never called the tracer. **That gap is now fixed**:
+  `LangfuseTracer::traceFailure()` sends a root span tagged `level: ERROR`
+  for exactly this case (same `Is Root Observation` + `Status` filters
+  alerts 1/3 already use, so this alert is a same-shape addition once
+  wired). The only reason this alert isn't live is the connected Langfuse
+  plan (Hobby) capping live alerts at 2 -- alerts 1 and 3 were prioritized
+  as ready first. Wiring this one is now purely a plan-tier decision, not
+  blocked on missing trace data.
 
 ## 3. Tool failure rate > threshold
 
@@ -118,6 +119,7 @@ live configuration is documented in its own section above, next to the
 `ALERTS.md`-derived trigger/threshold/on-call-step it implements, so the
 two stay traceable to each other.
 
-Alert 2 is not wired -- see its own section for the two independent
-reasons (plan tier + a real tracing gap for the failure path), and
-`PUNCH_LIST_2.md` Item 2 for the tracked follow-up.
+Alert 2 is not wired -- see its own section above. The tracing gap that
+originally blocked it is fixed (`LangfuseTracer::traceFailure()`); what
+remains is purely the connected Langfuse plan's 2-live-alert cap, tracked
+in `PUNCH_LIST_2.md` Item 2.
