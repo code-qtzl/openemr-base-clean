@@ -44,7 +44,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult;
 use Psr\Clock\ClockInterface;
 use RuntimeException;
 
-final class ChartContextTools
+final readonly class ChartContextTools
 {
     /** LOINC code for Hemoglobin A1c / Hemoglobin.total in Blood. */
     private const LOINC_A1C = '4548-4';
@@ -55,58 +55,35 @@ final class ChartContextTools
     /** Audit event name; the handle for filtering co-pilot disclosures. */
     private const AUDIT_EVENT = 'clinical-copilot-tool';
 
-    private readonly ClockInterface $clock;
+    private ClockInterface $clock;
 
     public function __construct(
-        private readonly int $patientId,
-        private readonly string $authUser,
-        private readonly string $authProvider,
-        private readonly string $correlationId,
+        private int $patientId,
+        private string $authUser,
+        private string $authProvider,
+        private string $correlationId,
         ?ClockInterface $clock = null,
     ) {
         $this->clock = $clock ?? ServiceContainer::getClock();
     }
 
     /**
-     * Tool definitions in Anthropic Messages API shape.
+     * The four allowlisted chart-reading tools' definitions, in Anthropic
+     * Messages API shape -- loaded from schemas/tool-definitions.json (the
+     * contract), not hand-written here (PUNCH_LIST_2.md Item 4).
      *
      * Note there is no patient parameter anywhere by design -- see the class
      * docblock. The descriptions tell the model what each tool covers so it
      * requests only what a given question needs.
      *
-     * @return list<array{name: string, description: string, inputSchema: array<string, mixed>}>
+     * @return list<array{name: string, description: string, input_schema: array<string, mixed>}>
      */
     public static function definitions(): array
     {
-        $noArgs = ['type' => 'object', 'properties' => (object) [], 'required' => []];
-
-        return [
-            [
-                'name' => 'get_a1c_series',
-                'description' => 'Hemoglobin A1c results for this patient over time, oldest first, '
-                    . 'with value, units, reference range and abnormal flag. Use for questions about '
-                    . 'glycaemic control, diabetes trajectory, or whether the patient is improving.',
-                'inputSchema' => $noArgs,
-            ],
-            [
-                'name' => 'get_active_problems',
-                'description' => 'The active problem list for this patient: title, coded diagnosis, '
-                    . 'onset date and outcome. Use to establish what conditions the patient carries.',
-                'inputSchema' => $noArgs,
-            ],
-            [
-                'name' => 'get_medications',
-                'description' => 'Currently active prescriptions: drug, dosage, form, interval, route '
-                    . 'and start date. Use for questions about treatment, adherence or therapy changes.',
-                'inputSchema' => $noArgs,
-            ],
-            [
-                'name' => 'get_recent_encounters',
-                'description' => 'The most recent encounters for this patient: date, reason and '
-                    . 'encounter type. Use to establish recent clinical activity or visit history.',
-                'inputSchema' => $noArgs,
-            ],
-        ];
+        return array_map(
+            ToolSchemaRegistry::get(...),
+            ['get_a1c_series', 'get_active_problems', 'get_medications', 'get_recent_encounters'],
+        );
     }
 
     /**

@@ -38,7 +38,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
 use RuntimeException;
 
-final class CopilotService
+final readonly class CopilotService
 {
     private const MODEL = 'claude-opus-5';
     private const MAX_TOKENS = 8000;
@@ -73,8 +73,8 @@ final class CopilotService
         PROMPT;
 
     public function __construct(
-        private readonly ChartContextTools $tools,
-        private readonly AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
+        private ChartContextTools $tools,
+        private AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
     ) {
     }
 
@@ -199,52 +199,14 @@ final class CopilotService
         );
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Loaded from schemas/tool-definitions.json (the contract), not
+     * hand-written here (PUNCH_LIST_2.md Item 4).
+     *
+     * @return array{name: string, description: string, input_schema: array<string, mixed>}
+     */
     private static function submitAnswerToolDefinition(): array
     {
-        return [
-            'name' => self::SUBMIT_ANSWER_TOOL,
-            'description' => 'Give your final answer to the clinician. Every clinical claim must cite '
-                . 'exactly one tool call made this turn as its source_tool. If the tool results do not '
-                . 'contain enough information to answer the question, set insufficient_information to '
-                . 'true instead of guessing.',
-            'input_schema' => [
-                'type' => 'object',
-                'properties' => [
-                    'insufficient_information' => [
-                        'type' => 'boolean',
-                        'description' => 'True if the tool results do not contain enough information to '
-                            . 'answer the question.',
-                    ],
-                    'summary' => [
-                        'type' => 'string',
-                        'description' => 'Optional framing text with no clinical claims of its own (e.g. '
-                            . '"Based on the chart:"), or the full honest answer when '
-                            . 'insufficient_information is true.',
-                    ],
-                    'claims' => [
-                        'type' => 'array',
-                        'description' => 'One entry per clinical claim in the answer. Omit or leave empty '
-                            . 'when insufficient_information is true.',
-                        'items' => [
-                            'type' => 'object',
-                            'properties' => [
-                                'text' => [
-                                    'type' => 'string',
-                                    'description' => 'The clinical claim, stated plainly.',
-                                ],
-                                'source_tool' => [
-                                    'type' => 'string',
-                                    'description' => 'Name of the tool call made this turn whose result '
-                                        . 'supports this claim.',
-                                ],
-                            ],
-                            'required' => ['text', 'source_tool'],
-                        ],
-                    ],
-                ],
-                'required' => ['insufficient_information', 'claims'],
-            ],
-        ];
+        return ToolSchemaRegistry::get(self::SUBMIT_ANSWER_TOOL);
     }
 }

@@ -1,0 +1,83 @@
+{
+    "$comment": "Canonical Anthropic Messages API tool definitions for the Clinical Co-Pilot -- the contract, not the implementation (PUNCH_LIST_2.md Item 4). ChartContextTools::definitions() and CopilotService::submitAnswerToolDefinition() load from this file via ToolSchemaRegistry rather than hand-rewriting it inline. Field names (name, description, input_schema) match Anthropic's wire format exactly -- see vendor/anthropic-ai/sdk/src/Beta/Messages/BetaTool.php's #[Required('input_schema')] attribute; a prior inline copy of these definitions used camelCase 'inputSchema' for the four chart tools, which Anthropic's API does not recognize (silently harmless only because all four take no arguments to begin with). An empty 'properties: {}' here is loaded and re-encoded as a PHP stdClass by ToolSchemaRegistry, not a plain array -- confirmed against the real API, which rejects an empty properties re-serialized as a JSON array ('Input should be an object') the way a naive json_decode(..., associative: true) round-trip would produce.",
+    "tools": [
+        {
+            "name": "get_a1c_series",
+            "description": "Hemoglobin A1c results for this patient over time, oldest first, with value, units, reference range and abnormal flag. Use for questions about glycaemic control, diabetes trajectory, or whether the patient is improving.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "get_active_problems",
+            "description": "The active problem list for this patient: title, coded diagnosis, onset date and outcome. Use to establish what conditions the patient carries.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "get_medications",
+            "description": "Currently active prescriptions: drug, dosage, form, interval, route and start date. Use for questions about treatment, adherence or therapy changes.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "get_recent_encounters",
+            "description": "The most recent encounters for this patient: date, reason and encounter type. Use to establish recent clinical activity or visit history.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "submit_answer",
+            "description": "Give your final answer to the clinician. Every clinical claim must cite exactly one tool call made this turn as its source_tool. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "insufficient_information": {
+                        "type": "boolean",
+                        "description": "True if the tool results do not contain enough information to answer the question."
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "Optional framing text with no clinical claims of its own (e.g. \"Based on the chart:\"), or the full honest answer when insufficient_information is true."
+                    },
+                    "claims": {
+                        "type": "array",
+                        "description": "One entry per clinical claim in the answer. Omit or leave empty when insufficient_information is true.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {
+                                    "type": "string",
+                                    "description": "The clinical claim, stated plainly."
+                                },
+                                "source_tool": {
+                                    "type": "string",
+                                    "description": "Name of the tool call made this turn whose result supports this claim."
+                                }
+                            },
+                            "required": [
+                                "text",
+                                "source_tool"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "insufficient_information",
+                    "claims"
+                ]
+            }
+        }
+    ]
+}
