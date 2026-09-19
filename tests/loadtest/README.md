@@ -121,3 +121,18 @@ BASE_URL=https://openemr-production-a819.up.railway.app PASSWORD='<OE_ADMIN_PASS
 See `PERFORMANCE_BASELINE.md` (repo root) for the numbers pulled out of
 these files into a baseline table, and `ALERTS.md` for the thresholds
 derived from them.
+
+## Real-API cost/token measurement
+
+`real-api-cost-smoke.php` is a separate tool from the k6 SMOKE mode above: it
+calls `CopilotService::ask()` directly (real Anthropic API, real chart data)
+so it can read `AskResult::inputTokens`/`outputTokens` -- the exact usage the
+SDK reports -- which k6's HTTP-only view can't see. Backs `AI_SPEND.md`
+(repo root)'s actual observed cost figures. Run it the same way as
+`tests/Tests/Fixtures/ClinicalCopilot/apply-schema.php` (web user, not root):
+
+```bash
+php tests/loadtest/real-api-cost-smoke.php [pid]
+```
+
+Incurs real, small (cents-scale) Anthropic spend per run.

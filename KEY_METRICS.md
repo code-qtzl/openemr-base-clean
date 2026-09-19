@@ -2,10 +2,17 @@
 
 What does success mean for Dr. Elena Ruiz (`USERS.md`)? Six metrics prove it.
 
-**Status: none can be measured today** — the instrumentation (correlation IDs,
-`clinical_copilot_log`, verification layer, Langfuse tracing) is designed in
-`ARCHITECTURE.md` Phases 0–2 but not yet built. This document defines the
-target metrics now, in advance, so the build has a clear goal.
+**Status (updated 2026-09-19): the instrumentation is built; four of six
+primary metrics are measurable today.** Correlation IDs, `clinical_copilot_log`,
+the verification layer, and Langfuse tracing (`ARCHITECTURE.md` Phases 0–2)
+all shipped in `PUNCH_LIST.md` Tiers 0–3. Metrics 1 (Claim-Grounding Rate), 3
+(p95 Time-to-Answer), 4 (Audit Completeness Rate), and 6 (Cross-Patient Access
+Integrity) can be queried against real data right now. Metric 2 (Verified
+Incident Rate) still needs the "flag this answer" button (not built). Metric 5
+(Adoption Rate) is instrumentable but has no value yet — it requires real
+clinician usage, which hasn't happened outside testing. See `AI_SPEND.md` for
+the "Cost per conversation" secondary metric below, now backed by a real
+measured figure rather than a placeholder.
 
 **How to read:** each metric has a definition, why it signals success for this
 user (not a generic AI metric), how it's measured, a target, and its blind spot.
@@ -90,7 +97,11 @@ so this only checks that invariant hasn't silently broken.
 ## Secondary metrics (operational health, not product success)
 
 - **Tool failure rate** — DB/query health, not a clinical-trust signal
-- **Cost per conversation** — whether model choice stays sustainable
+- **Cost per conversation** — whether model choice stays sustainable.
+  **Measured** (see `AI_SPEND.md`): ~$0.076/question average (range
+  $0.035–$0.11) against real chart data on 2026-09-19, `claude-opus-5`,
+  Anthropic's published per-token rate. `AI_SPEND.md` also carries the
+  scaling projection a hospital CTO would ask for next.
 - **p95/p99 latency under load** (10/50 concurrent) — infrastructure capacity
 
 ## Deliberately rejected
