@@ -16,7 +16,9 @@
 // Load autoloader
 require_once __DIR__ . "/../../vendor/autoload.php";
 
+use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Health\HealthChecker;
+use OpenEMR\Health\HealthEndpointResponse;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -70,8 +72,7 @@ try {
             // not ready -- the JSON body's `status`/`healthy` fields alone
             // are not enough, since a probe checks the HTTP status code.
             $checker = new HealthChecker();
-            $results = $checker->getResultsArray();
-            $response = new JsonResponse($results, $results['healthy'] ? Response::HTTP_OK : Response::HTTP_SERVICE_UNAVAILABLE);
+            $response = HealthEndpointResponse::forCheckerResults($checker->getResultsArray());
         } else {
             // Not installed - return minimal response
             $response = new JsonResponse([
@@ -93,8 +94,11 @@ try {
     );
     $response->send();
 } catch (\Throwable $e) {
-    // Even on error, return 200 with error details in body
-    // This ensures the probe doesn't fail just because of an exception
-    $response = new JsonResponse(['status' => 'error', 'message' => $e->getMessage()]);
+    // Fail closed: an orchestrator (k8s, Railway, ...) only ever looks at
+    // the HTTP status code, not the JSON body, so a 200 here would report
+    // this instance as ready/alive while it's actually broken enough to
+    // have thrown. See HealthEndpointResponse::forException() for why this
+    // never surfaces $e's own message.
+    $response = HealthEndpointResponse::forException($e, ServiceContainer::getLogger());
     $response->send();
 }
