@@ -104,6 +104,38 @@ so this only checks that invariant hasn't silently broken.
   scaling projection a hospital CTO would ask for next.
 - **p95/p99 latency under load** (10/50 concurrent) — infrastructure capacity
 
+## Live dashboard evidence
+
+`PUNCH_LIST_2.md` Item 2: proof the Langfuse dashboard actually renders
+these numbers for real traffic, not just that the code sends them.
+Screenshots taken 2026-09-19, `Past 1 day` view, this project's real
+Langfuse instance.
+
+![Environment filter showing test/default/production traces split out with counts](docs/images/clinical-copilot/langfuse-environment-split.png)
+
+The `Environment` filter — added this session (`LangfuseTracer`/
+`LangfuseOtlpPayloadBuilder`'s `deployment.environment.name` resource
+attribute) — now separates `test` (202 events: PHPUnit runs, including
+`CopilotChatControllerTest`, which exercise the real tracer against fixture
+token counts), `production` (49 events: real requests — this session's
+`real-api-cost-smoke.php` runs and the real-API load-test smoke pass), and
+`default` (100 events: traces sent before this session's fix, when no
+environment tag existed yet). Before this fix, all 351 of these were
+indistinguishable in one bucket, making cost/latency/quality numbers
+unusable for real usage — see `PUNCH_LIST_2.md` Item 2 for the full story.
+
+![Sum cost by model over time, claude-opus-5, showing a real non-zero cost peak](docs/images/clinical-copilot/langfuse-cost-by-model.png)
+
+Cost and token count render correctly for `claude-opus-5` — this was an
+open, unverified risk before this session (Langfuse computes cost from its
+own model-pricing catalog, and `claude-opus-5` was never confirmed to be a
+model it recognized). Note this specific chart has `test`/`default`/
+`production` all included (the filter panel shows all three checked), so
+the ~$0.62 peak is blended, not production-only — the environment filter
+above is what to use to isolate real usage; `AI_SPEND.md`'s $0.0759/question
+figure is the precise production-only number, computed directly from
+`AskResult`'s token counts rather than read off this chart.
+
 ## Deliberately rejected
 
 - **Total questions** — vanity metric; volume without Metric 1/5 means nothing
