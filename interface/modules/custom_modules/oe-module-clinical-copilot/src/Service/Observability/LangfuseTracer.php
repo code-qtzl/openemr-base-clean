@@ -48,6 +48,7 @@ final class LangfuseTracer
         private readonly ?string $publicKey = null,
         private readonly ?string $secretKey = null,
         private readonly ?string $host = null,
+        private readonly ?string $environment = null,
         private readonly ?ClientInterface $transporter = null,
     ) {
     }
@@ -147,7 +148,7 @@ final class LangfuseTracer
 
         try {
             $body = json_encode(
-                LangfuseOtlpPayloadBuilder::build($traceId, $spans),
+                LangfuseOtlpPayloadBuilder::build($traceId, $spans, $this->environment()),
                 JSON_THROW_ON_ERROR,
             );
 
@@ -171,6 +172,28 @@ final class LangfuseTracer
                 'exception' => $e,
             ]);
         }
+    }
+
+    /**
+     * `ENV`/`ENVIRONMENT` reuses this project's existing environment-name
+     * convention (phpunit.xml sets `ENV=test` for every PHPUnit run;
+     * GitHub Actions sets `ENVIRONMENT=ci`) rather than inventing a new
+     * signal -- without this, every test run (CopilotChatControllerTest
+     * included, which exercises the real LangfuseTracer against
+     * FakeAnthropicTransporter's fixture token counts) lands in the same
+     * "default" Langfuse environment as genuine clinician traffic, making
+     * cost/latency/quality dashboards unusable for real usage.
+     */
+    private function environment(): string
+    {
+        if ($this->environment !== null) {
+            return $this->environment;
+        }
+
+        $envBag = OEEnvBag::getInstance();
+        $env = $envBag->getString('ENV', $envBag->getString('ENVIRONMENT', ''));
+
+        return $env !== '' ? $env : 'production';
     }
 
     private static function traceIdFromCorrelationId(string $correlationId): string

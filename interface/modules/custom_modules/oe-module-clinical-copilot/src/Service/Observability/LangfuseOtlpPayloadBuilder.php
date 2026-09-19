@@ -35,10 +35,18 @@ final class LangfuseOtlpPayloadBuilder
 
     /**
      * @param list<Span> $spans
+     * @param string $environment Langfuse's environment field, read via the
+     *                            OTel `deployment.environment.name` resource
+     *                            attribute -- see
+     *                            https://langfuse.com/docs/opentelemetry and
+     *                            LangfuseTracer::environment() for how this
+     *                            is resolved. Separates real usage from
+     *                            test/CI-generated traces in Langfuse's
+     *                            dashboard filters.
      *
      * @return array<string, mixed> JSON-encoding-ready OTLP export request.
      */
-    public static function build(string $traceId, array $spans): array
+    public static function build(string $traceId, array $spans, string $environment): array
     {
         return [
             'resourceSpans' => [
@@ -46,6 +54,7 @@ final class LangfuseOtlpPayloadBuilder
                     'resource' => [
                         'attributes' => [
                             self::attribute('service.name', 'openemr-clinical-copilot'),
+                            self::attribute('deployment.environment.name', $environment),
                         ],
                     ],
                     'scopeSpans' => [

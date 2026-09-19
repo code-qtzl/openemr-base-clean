@@ -25,7 +25,7 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
     {
         $span = new Span('a1a1a1a1a1a1a1a1', null, 'root', 1_700_000_000.0, 1_700_000_001.5, []);
 
-        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span]));
+        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span], 'test'));
         $encoded = self::spanAt($spans, 0);
 
         self::assertArrayNotHasKey('parentSpanId', $encoded);
@@ -37,7 +37,7 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
     {
         $span = new Span('b2b2b2b2b2b2b2b2', 'a1a1a1a1a1a1a1a1', 'child', 1_700_000_000.0, 1_700_000_000.5, []);
 
-        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span]));
+        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span], 'test'));
         $encoded = self::spanAt($spans, 0);
 
         self::assertSame('a1a1a1a1a1a1a1a1', $encoded['parentSpanId']);
@@ -47,7 +47,7 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
     {
         $span = new Span('a1a1a1a1a1a1a1a1', null, 'root', 1_700_000_000.0, 1_700_000_001.5, []);
 
-        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span]));
+        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span], 'test'));
         $encoded = self::spanAt($spans, 0);
 
         self::assertSame('1700000000000000000', $encoded['startTimeUnixNano']);
@@ -63,7 +63,7 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
             'a.float' => 3.5,
         ]);
 
-        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span]));
+        $spans = self::spans(LangfuseOtlpPayloadBuilder::build('t', [$span], 'test'));
         $attributes = self::spanAt($spans, 0)['attributes'];
         self::assertIsArray($attributes);
 
@@ -89,7 +89,7 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
             new Span('c3c3c3c3c3c3c3c3', 'a1a1a1a1a1a1a1a1', 'child-b', 0.2, 0.6, []),
         ];
 
-        $encoded = self::spans(LangfuseOtlpPayloadBuilder::build('t', $spans));
+        $encoded = self::spans(LangfuseOtlpPayloadBuilder::build('t', $spans, 'test'));
 
         self::assertCount(3, $encoded);
         self::assertSame(
@@ -105,10 +105,54 @@ class LangfuseOtlpPayloadBuilderTest extends TestCase
             new Span('b2b2b2b2b2b2b2b2', 'a1a1a1a1a1a1a1a1', 'child', 0.1, 0.5, []),
         ];
 
-        $encoded = self::spans(LangfuseOtlpPayloadBuilder::build('deadbeef', $spans));
+        $encoded = self::spans(LangfuseOtlpPayloadBuilder::build('deadbeef', $spans, 'test'));
 
         self::assertSame('deadbeef', self::spanAt($encoded, 0)['traceId']);
         self::assertSame('deadbeef', self::spanAt($encoded, 1)['traceId']);
+    }
+
+    /**
+     * Separates test/CI-generated traces from genuine clinician traffic in
+     * Langfuse's dashboard filters -- without this, a PHPUnit run (which
+     * exercises the real LangfuseTracer against fixture token counts) is
+     * indistinguishable from real usage.
+     */
+    public function testResourceAttributesCarryServiceNameAndEnvironment(): void
+    {
+        $span = new Span('a1a1a1a1a1a1a1a1', null, 'root', 0.0, 1.0, []);
+
+        $payload = LangfuseOtlpPayloadBuilder::build('t', [$span], 'test');
+
+        $attributes = self::resourceAttributes($payload);
+        self::assertSame(['stringValue' => 'openemr-clinical-copilot'], $attributes['service.name']);
+        self::assertSame(['stringValue' => 'test'], $attributes['deployment.environment.name']);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array<string, mixed>
+     */
+    private static function resourceAttributes(array $payload): array
+    {
+        $resourceSpans = $payload['resourceSpans'] ?? null;
+        self::assertIsArray($resourceSpans);
+        $resourceSpan0 = $resourceSpans[0] ?? null;
+        self::assertIsArray($resourceSpan0);
+        $resource = $resourceSpan0['resource'] ?? null;
+        self::assertIsArray($resource);
+        $attributes = $resource['attributes'] ?? null;
+        self::assertIsArray($attributes);
+
+        $byKey = [];
+        foreach ($attributes as $attribute) {
+            self::assertIsArray($attribute);
+            $key = $attribute['key'];
+            self::assertIsString($key);
+            $byKey[$key] = $attribute['value'];
+        }
+
+        return $byKey;
     }
 
     /**

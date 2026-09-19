@@ -183,6 +183,73 @@ class LangfuseTracerTest extends TestCase
     }
 
     /**
+     * phpunit.xml sets `<env name="ENV" value="test" />` for every PHPUnit
+     * run -- without LangfuseTracer reading it, this very test (and every
+     * DB-backed CopilotChatControllerTest run, which exercises the real
+     * LangfuseTracer against fixture token counts) would land in the same
+     * Langfuse "default" environment as genuine clinician traffic.
+     */
+    public function testEnvironmentDefaultsToTheAmbientEnvVariablePhpunitSets(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', self::stubResult(), 0.0, 1.0);
+
+        self::assertSame(
+            ['stringValue' => 'test'],
+            self::resourceAttributesOf($transporter->captured)['deployment.environment.name'],
+        );
+    }
+
+    public function testExplicitEnvironmentOverridesTheAmbientDefault(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(
+            publicKey: 'pk-lf-test',
+            secretKey: 'sk-lf-test',
+            environment: 'production',
+            transporter: $transporter,
+        );
+
+        $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', self::stubResult(), 0.0, 1.0);
+
+        self::assertSame(
+            ['stringValue' => 'production'],
+            self::resourceAttributesOf($transporter->captured)['deployment.environment.name'],
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function resourceAttributesOf(?RequestInterface $request): array
+    {
+        self::assertNotNull($request);
+
+        $body = json_decode((string) $request->getBody(), true);
+        self::assertIsArray($body);
+        $resourceSpans = $body['resourceSpans'] ?? null;
+        self::assertIsArray($resourceSpans);
+        $resourceSpan0 = $resourceSpans[0] ?? null;
+        self::assertIsArray($resourceSpan0);
+        $resource = $resourceSpan0['resource'] ?? null;
+        self::assertIsArray($resource);
+        $attributes = $resource['attributes'] ?? null;
+        self::assertIsArray($attributes);
+
+        $byKey = [];
+        foreach ($attributes as $attribute) {
+            self::assertIsArray($attribute);
+            $key = $attribute['key'];
+            self::assertIsString($key);
+            $byKey[$key] = $attribute['value'];
+        }
+
+        return $byKey;
+    }
+
+    /**
      * Decodes one span's OTLP attribute list back into a plain
      * key => value map (arrayValue -> list<string>, the rest scalar),
      * mirroring LangfuseOtlpPayloadBuilder::anyValue()'s encoding.
