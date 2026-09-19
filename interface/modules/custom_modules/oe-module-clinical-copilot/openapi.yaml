@@ -1,0 +1,252 @@
+openapi: 3.0.3
+info:
+  title: Clinical Co-Pilot API
+  version: "1.0"
+  license:
+    name: GNU General Public License 3
+    url: https://github.com/openemr/openemr/blob/master/LICENSE
+  description: >-
+    PUNCH_LIST_2.md Item 4: a standalone contract for the co-pilot's own
+    HTTP endpoints, independent of the PHP that implements them. Every
+    response shape here is verified against a running instance by
+    tests/bruno/clinical-copilot/ (run that collection to check this
+    document, or this document to check that collection -- either
+    direction should always agree) and by
+    tests/Tests/Services/Modules/ClinicalCopilot/CopilotChatControllerTest.php.
+    This does not cover OpenEMR's own REST/FHIR API (interface/../apis/) --
+    only the two endpoints this module adds.
+servers:
+- url: "{baseUrl}"
+  variables:
+    baseUrl:
+      default: http://localhost:8300
+security:
+- sessionCookie: []
+paths:
+  /interface/modules/custom_modules/oe-module-clinical-copilot/public/ajax.php:
+    post:
+      operationId: askCopilot
+      summary: Ask the Clinical Co-Pilot a question about the session's selected patient
+      description: >-
+        The patient is never a request parameter -- it comes from the
+        server-side session (the chart the signed-in user has open). See
+        CopilotChatController's own docblock: this is the security boundary
+        for the whole module.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: >-
+            A verified reply. `verificationPassed: false` is a legitimate
+            200, not an error -- the verification layer rejected an
+            uncited/hallucinated claim and substituted the safe fallback
+            reply in `reply` instead of failing the request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatSuccessResponse"
+              examples:
+                verified:
+                  value:
+                    reply: "The active problem list shows Type 2 diabetes mellitus."
+                    toolsUsed: ["get_active_problems"]
+                    correlationId: "11112222-3333-4444-5555-666677778888"
+                    verificationPassed: true
+        "400":
+          description: >-
+            Question missing, empty, or over 2000 characters -- rejected
+            before any tool or Anthropic work happens.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Question is too long."
+                correlationId: "11112222-3333-4444-5555-666677778888"
+        "403":
+          description: >-
+            CSRF token missing/mismatched, or the session lacks the
+            `patients`/`demo` ACL -- both checked before patient scoping or
+            any co-pilot work runs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Session expired. Reload the page and try again."
+                correlationId: "11112222-3333-4444-5555-666677778888"
+        "500":
+          description: >-
+            CopilotService::ask() threw (missing API key, Anthropic API
+            error, SQL error, ...). The message is always this generic
+            string -- never the underlying exception's own message, which
+            can carry API/SQL/prompt detail. See the full error in the PHP
+            error log or clinical_copilot_log, keyed by correlationId.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "The co-pilot could not answer that right now."
+                correlationId: "11112222-3333-4444-5555-666677778888"
+  /meta/health/livez:
+    get:
+      operationId: getLivez
+      security: []
+      summary: Liveness probe -- is the PHP process running
+      description: No authentication, no database, no dependency checks.
+      responses:
+        "200":
+          description: Always 200 if this endpoint is reachable at all.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [alive]
+              example:
+                status: alive
+  /meta/health/readyz:
+    get:
+      operationId: getReadyz
+      security: []
+      summary: Readiness probe -- are OpenEMR's real dependencies reachable
+      description: >-
+        Checks the database, filesystem, session store, OAuth keys, cache,
+        the Anthropic API, and Langfuse. The HTTP status code, not just the
+        JSON body, is what an orchestrator (Kubernetes, Railway, ...) acts
+        on -- 200 only when every dependency `healthy` reflects is actually
+        up; 503 otherwise, including when the endpoint's own bootstrap
+        throws (it fails closed rather than defaulting to 200 on an
+        internal error).
+      responses:
+        "200":
+          description: All dependencies healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyzResponse"
+        "503":
+          description: >-
+            At least one real dependency (database, Anthropic API,
+            Langfuse, ...) is unhealthy, or the endpoint's own bootstrap
+            threw an exception.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyzResponse"
+              examples:
+                dependencyDown:
+                  value:
+                    status: ready
+                    healthy: false
+                    checks:
+                      installed: true
+                      database: true
+                      filesystem: true
+                      session: true
+                      oauth_keys: true
+                      cache: true
+                      anthropic_api: false
+                      langfuse: true
+                internalError:
+                  value:
+                    status: error
+                    message: "Health check failed"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+      description: >-
+        Requires an authenticated OpenEMR session with a patient already
+        selected (CopilotChatController reads the patient id from the
+        session, never from a request parameter) and the `patients`/`demo`
+        ACL. The CSRF token is a second, independent requirement passed as
+        a request body field (`ChatRequest.csrf_token`), not modeled by
+        OpenAPI's securityScheme types.
+  schemas:
+    ChatRequest:
+      type: object
+      required: [csrf_token, question]
+      properties:
+        csrf_token:
+          type: string
+          description: >-
+            Per-session CSRF token (CsrfUtils::collectCsrfToken()) -- must
+            match the current session's private key, not just be present.
+        question:
+          type: string
+          maxLength: 2000
+          description: The clinician's question, in their own words.
+    ChatSuccessResponse:
+      type: object
+      required: [reply, toolsUsed, correlationId, verificationPassed]
+      properties:
+        reply:
+          type: string
+          description: >-
+            Always safe to show as-is -- either the model's verified
+            answer, or ResponseVerifier's safe fallback reply.
+        toolsUsed:
+          type: array
+          items:
+            type: string
+            enum: [get_a1c_series, get_active_problems, get_medications, get_recent_encounters]
+        correlationId:
+          type: string
+          format: uuid
+          description: >-
+            Shared with the PHP error log, clinical_copilot_log, and the
+            Langfuse trace for this request -- the one id to grep for a
+            full trace of what happened.
+        verificationPassed:
+          type: boolean
+    ErrorResponse:
+      type: object
+      required: [error, correlationId]
+      properties:
+        error:
+          type: string
+          description: A generic, user-safe message -- never an exception's own message.
+        correlationId:
+          type: string
+          format: uuid
+    ReadyzResponse:
+      type: object
+      required: [status]
+      description: >-
+        `healthy`/`checks` are present except when `status` is "error" (the
+        endpoint's own bootstrap threw before HealthChecker could run at
+        all -- see HealthEndpointResponse::forException()).
+      properties:
+        status:
+          type: string
+          enum: [ready, setup_required, error]
+          description: >-
+            Install-flag status, kept separate from `healthy` because of a
+            known InstallationCheck/library/sql.inc.php interaction --
+            "setup_required" on a fully-installed, fully-healthy instance
+            is expected; see HealthChecker's own docblock.
+        healthy:
+          type: boolean
+          description: >-
+            The real dependency-readiness signal. False whenever database,
+            filesystem, session, OAuth keys, cache, the Anthropic API, or
+            Langfuse is unhealthy.
+        checks:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Per-dependency healthy/unhealthy, present when status is not "error".
+        message:
+          type: string
+          description: Present only when status is "error" -- a generic message, never an exception's own.
