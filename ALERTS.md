@@ -6,6 +6,11 @@ dashboard. Thresholds are tied to `PERFORMANCE_BASELINE.md`'s numbers
 and caveats (host resource contention, Railway not yet captured) before
 treating these as final production values.
 
+**Status (2026-09-19): 2 of 3 are live**, wired via Langfuse's own
+Automations feature to a private Slack channel (`#az-langfuse-alerts`,
+visible only to the project owner). Alert 2 is documented but not wired --
+see its own section below for why. `PUNCH_LIST_2.md` Item 2 tracks this.
+
 ## 1. p95 chat latency > threshold
 
 - **Trigger condition**: `clinical-copilot.ask` root-span p95 latency (the
@@ -28,6 +33,14 @@ treating these as final production values.
   baseline above) -- then check instance resource saturation (CPU/memory,
   the mocked-load numbers show this instance saturating well before 50
   concurrent users).
+- **Live configuration** (Langfuse Alerts, 2026-09-19): View `Observations`,
+  Measure `Latency`, Aggregation `p95`, Filters `Is Root Observation: true`
+  + `Environment: production`, trigger `above` `37` over the past
+  `15 minutes`, notifying `#az-langfuse-alerts` via Slack. `Is Root
+  Observation` (not a name match on `clinical-copilot.ask`) is what scopes
+  this to one full request per trace -- Langfuse's alert builder has no
+  separate "Traces" view, only `Observations`/`Scores`, so this is how a
+  whole-request metric is expressed here.
 
 ## 2. Error rate > threshold
 
@@ -44,6 +57,19 @@ treating these as final production values.
   "app is broken" from "a dependency -- DB, Anthropic API, Langfuse -- is
   down," per PUNCH_LIST.md Tier 1.2), then recent deploys, then the
   Anthropic API status page.
+- **Not live, for two independent reasons** (2026-09-19): the connected
+  Langfuse plan (Hobby) caps live alerts at 2, so a choice had to be made --
+  but that cap didn't actually cost anything here, because of the second,
+  more fundamental reason: **`CopilotChatController`'s `catch` block never
+  calls `LangfuseTracer::traceAsk()`.** A request that throws (missing API
+  key, Anthropic API error, SQL error -- exactly the failures this alert is
+  meant to catch) produces *no Langfuse trace at all* today, even though it
+  is still correctly written to `clinical_copilot_log` and the PHP error
+  log. There is currently no trace data in Langfuse for this alert to watch
+  regardless of plan tier. Closing that gap (tracing the failure path with
+  a root span tagged `level: ERROR`) is a real, scoped follow-up, tracked
+  in `PUNCH_LIST_2.md` Item 2 -- once it exists, this alert becomes a
+  same-shape addition to alerts 1/3 above.
 
 ## 3. Tool failure rate > threshold
 
@@ -66,17 +92,32 @@ treating these as final production values.
   pure SQL reads against OpenEMR's own DB, per `CopilotService`'s and
   `ChartContextTools`' own docblocks), then check for a schema migration
   mismatch (a column the tool's query expects having changed).
+- **Live configuration** (Langfuse Alerts, 2026-09-19): View `Observations`,
+  Measure `Count`, Filters `Type: TOOL` + `Status: ERROR` +
+  `Environment: production`, trigger `above` **`1`** over the past
+  `15 minutes`, notifying `#az-langfuse-alerts` via Slack.
+  `Status: ERROR` maps directly to `LangfuseTracer`'s existing
+  `langfuse.observation.level` attribute (`ERROR`/`DEFAULT` per
+  `ToolCallSpan->success`) -- no code change needed for this one. The
+  threshold is an **absolute-count approximation of ">2%"**, not a true
+  percentage: Langfuse's alert builder has no ratio/rate Measure, only
+  absolute ones (Count, Latency, Cost, Tokens). At today's real traffic
+  volume, "2%" doesn't round to a meaningful number yet -- and the
+  documented baseline is **zero** observed tool failures across ~800 mocked
+  requests, so any single observed failure is already worth surfacing.
+  Revisit and raise this threshold once real usage is high enough that
+  occasional transient failures become statistically normal rather than
+  notable.
 
 ## Implementation note
 
-These are defined here as PUNCH_LIST.md 3.4 requires (trigger condition +
-threshold + on-call step, checked into the repo) but not yet wired into an
-actual alerting backend -- Langfuse Cloud's own alerting/webhook
-configuration (dashboard-side, not code) is the natural place to implement
-all three against what Tier 3.3 emits: `langfuse.trace.tags`
-(`verification-passed`/`verification-failed`, `retried`),
-`langfuse.trace.metadata.retry_count`, and, per tool-call span,
-`langfuse.observation.level` (`ERROR` on a failed tool call, queryable
-directly without parsing `observation.output`). See the Tier 3 completion
-report for open follow-ups (no Langfuse alerting rules configured yet --
-that's dashboard-side setup, not a code change).
+Alerts 1 and 3 are wired to a live backend: Langfuse's own Automations
+feature, sending to a private Slack channel (`#az-langfuse-alerts`, visible
+only to the project owner -- not broadcast to a shared team channel). Each
+live configuration is documented in its own section above, next to the
+`ALERTS.md`-derived trigger/threshold/on-call-step it implements, so the
+two stay traceable to each other.
+
+Alert 2 is not wired -- see its own section for the two independent
+reasons (plan tier + a real tracing gap for the failure path), and
+`PUNCH_LIST_2.md` Item 2 for the tracked follow-up.
