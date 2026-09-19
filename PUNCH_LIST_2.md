@@ -53,48 +53,44 @@ change.
 
 ## Item 2 — Make observability visible through a live dashboard
 
-**Current state: ~65%.** Confirmed, with real evidence, this session:
-- The user opened the actual live Langfuse dashboard and confirmed trace
-  latency percentiles rendering correctly, with the right span hierarchy
-  (`clinical-copilot.ask` root, `anthropic.messages` generation, per-tool
-  spans) — screenshotted and reviewed.
-- **Cost and token count DO render for `claude-opus-5`** — confirmed via a
-  "Sum cost by model over time" / "Sum tokens by model over time" chart
-  showing real non-zero dollar and token figures. This resolves what had
-  been an open, unverified risk.
-- That same check surfaced a real, previously-unknown bug: every PHPUnit
-  test run (`CopilotChatControllerTest` included) was sending real traces
-  with fixture token counts into the *same* Langfuse environment as genuine
-  usage, with no way to tell them apart — proven by that data showing up as
-  a spike matching this session's own test-suite runs. **Fixed**:
-  `LangfuseTracer`/`LangfuseOtlpPayloadBuilder` now tag every trace with the
-  OTel `deployment.environment.name` resource attribute (`test` for PHPUnit
-  runs, reusing this project's existing `ENV`/`ENVIRONMENT` convention;
-  `production` otherwise). Verified against the real Langfuse API: the
-  Item 1 real-API smoke-test traces are now correctly tagged
-  `"environment": "production"`, distinct from test noise. 3 new tests
-  added (`LangfuseTracerTest`, `LangfuseOtlpPayloadBuilderTest`); 71/71
-  copilot tests still pass; zero new PHPStan errors.
-- **Still open:**
-  1. No screenshot/link is committed into a repo doc yet (`KEY_METRICS.md`
-     or `ARCHITECTURE.md`) as durable evidence — it exists only in this
-     session's chat history so far.
-  2. `ALERTS.md`'s alerts are still not wired into a live alerting backend —
-     unchanged from before; not attempted this session.
-- **Build remaining:**
-  1. Commit a dashboard screenshot (or a short walkthrough) into
-     `KEY_METRICS.md`, now that cost/tokens/latency are confirmed rendering
-     with `environment: production` correctly separating real traffic from
-     test noise.
-  2. Wire at least the p95-latency and error-rate alerts from `ALERTS.md`
-     into a real Langfuse (or equivalent) alerting rule, or explicitly scope
-     that out with a stated reason.
-- **Acceptance:** `KEY_METRICS.md` links or embeds a real dashboard view with
-  real (production-tagged) traffic on it; `ALERTS.md` no longer says alerts
-  are undefined in a live backend, or explicitly scopes that out with a
-  reason.
-- **Effort remaining:** S (screenshot + doc commit) + S–M (live alert
-  wiring, if in scope).
+**Current state: ~90%. Effectively done**, with one clearly-scoped follow-up
+left. This session, in order:
+1. **Confirmed live**, with screenshots now committed into `KEY_METRICS.md`
+   (`docs/images/clinical-copilot/`): trace latency percentiles, and cost/
+   token count rendering correctly for `claude-opus-5` — the latter
+   resolves what had been an open, unverified risk (whether Langfuse's
+   pricing catalog even recognized the model name).
+2. **Fixed a real bug that check surfaced**: every PHPUnit test run was
+   sending real traces with fixture token counts into the same Langfuse
+   bucket as genuine usage. `LangfuseTracer`/`LangfuseOtlpPayloadBuilder`
+   now tag every trace with the OTel `deployment.environment.name` resource
+   attribute (`test` for PHPUnit, `production` otherwise) — confirmed via
+   both the Langfuse API and, later, the dashboard UI itself (a filter
+   screenshot showing `test: 202` / `default: 100` / `production: 49` as
+   distinct, countable buckets).
+3. **Wired 2 of 3 alerts to a live backend**: `ALERTS.md`'s p95-latency and
+   tool-failure-rate alerts are live in Langfuse (Automations →
+   private Slack channel `#az-langfuse-alerts`, visible only to the project
+   owner, not a shared team channel). Exact configuration for both is
+   documented in `ALERTS.md` next to the trigger/threshold they implement.
+4. **Found a second real bug while wiring the third alert**:
+   `CopilotChatController`'s `catch` block never calls `traceAsk()`, so a
+   request that throws produces *no Langfuse trace at all* today — the
+   error-rate alert has nothing to watch regardless of Langfuse plan tier
+   (which separately caps this account at 2 live alerts anyway). Documented
+   as an explicit, reasoned scope decision in `ALERTS.md`, not left
+   ambiguous.
+- **What's left (the 10%):** the tracing gap found in step 4 — add a
+  failure-path trace in `CopilotChatController`'s `catch` block (root span,
+  `level: ERROR`) so a real error-rate signal exists in Langfuse at all.
+  Optional/deferred by mutual agreement rather than forgotten: even once
+  built, the third alert can't go live without a plan upgrade, so this is
+  now a "close the observability gap for its own sake" task, not a blocker
+  for anything else.
+- **Acceptance:** met — `KEY_METRICS.md` embeds real dashboard views with
+  real (production-tagged) traffic; `ALERTS.md` states exactly which alerts
+  are live and why the third isn't, rather than leaving it undefined.
+- **Effort remaining:** S (the failure-path tracing fix, if pursued).
 
 ---
 
@@ -202,11 +198,10 @@ conservative rejection).
    measured cost and scaling table. Only remaining: a measured (not
    estimated) multi-turn figure, and an actual-billed confirmation if that
    precision is wanted.
-2. **Item 2 (live dashboard)** — **65%, up from 35%**; dashboard visibility
-   and cost rendering are now confirmed, and the environment-tagging bug
-   this surfaced is fixed. Remaining: commit a screenshot into
-   `KEY_METRICS.md` as durable evidence, and live-wire `ALERTS.md`'s alerts
-   (or explicitly scope that out).
+2. ~~**Item 2 (live dashboard)**~~ — **done, ~90%**; screenshots committed,
+   the environment-tagging bug fixed, 2 of 3 alerts live-wired to Slack, and
+   the third's blocker (a real tracing gap, not just a plan limit) found and
+   documented rather than left ambiguous.
 3. ~~**Item 3 (eval suite)**~~ — **done, ~95%**; the composed test case
    landed.
 4. ~~**Item 4 (API contracts / health)**~~ — **done, ~98%**; readyz fails
@@ -222,6 +217,6 @@ conservative rejection).
 |---|---|---|
 | "full verification layer" | Item 5 | ~85% |
 | "required eval and regression suite" | Item 3 | ~95% |
-| "observability visible through a live dashboard" | Item 2 | ~65% |
+| "observability visible through a live dashboard" | Item 2 | ~90% |
 | "complete the API contracts and health/readiness checks" | Item 4 | ~98% |
 | "document actual AI spend with... scaling projections" | Item 1 | ~90% |
