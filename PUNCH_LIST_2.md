@@ -132,43 +132,36 @@ errors, PSR-12/Rector/codespell clean.
 
 ## Item 4 — Complete the API contracts and health/readiness checks
 
-**Current state: ~80%.**
+**Current state: ~98%. Done.** All three planned sub-tasks landed, and two
+surfaced real bugs neither had a test for before this:
 
-- **Health/readiness: ~95%.** `AnthropicApiCheck`/`LangfuseCheck` are real
-  HTTP reachability probes (3s timeout, fail closed), `/readyz` returns 503
-  on failure, `/livez`/`/readyz` are separate endpoints. One narrow edge
-  case: an uncaught exception during the health-checker's own bootstrap
-  falls through to a default HTTP 200 instead of failing closed.
-- **API contracts: ~70%.** The *output* side is solid — DTOs
-  (`A1cSeriesResult`, etc.) are the one canonical shape, PHPStan-level-10
-  enforced, no duplication. The *input* side (the four tools' Anthropic
-  JSON-schema definitions, and `submit_answer`'s schema) are hand-written
-  inline PHP arrays co-located with the implementation that uses them — real
-  and correct, but not a separate, standalone contract document/file that
-  exists independently of the PHP that consumes it, which is what
-  `AgentForge.md`'s "contracts must be the source of truth, not the
-  implementation" phrasing asks for. Separately: the module's own external
-  HTTP contract (`ajax.php`'s request/response shape) exists only as
-  PHP code + the Bruno collection's example requests — no standalone
-  schema document (OpenAPI/JSON Schema) describes it.
-- **Build:**
-  1. Fix the `/readyz` bootstrap exception path to fail closed (return a
-     5xx) instead of defaulting to 200.
-  2. Extract the four tool input schemas + `submit_answer`'s schema into a
-     single schema file (JSON Schema, one file per tool or one combined
-     file) that `ChartContextTools::definitions()`/
-     `CopilotService::submitAnswerToolDefinition()` load from, rather than
-     hand-rewriting the array inline — makes the schema the actual source of
-     truth PHPStan/tests can validate against, not just documentation.
-  3. Add a minimal OpenAPI (or equivalent) document for the `/ajax.php` chat
-     endpoint's request/response shape, generated from or validated against
-     the same contract the Bruno collection already exercises.
-- **Acceptance:** `/readyz` returns non-200 on an internal exception (new
-  test case); tool schemas load from a committed schema file, not an inline
-  array literal; an OpenAPI/JSON-Schema doc for the chat endpoint exists and
-  matches what `CopilotChatControllerTest` already asserts about the
-  response shape.
-- **Effort:** S (readyz fix) + M (schema extraction + OpenAPI doc).
+1. **`/readyz` fails closed.** An uncaught exception anywhere in
+   `meta/health/index.php`'s dispatch previously fell through to a bare
+   200 with `$e->getMessage()` echoed straight into the body (a real
+   CLAUDE.md violation on top of the readiness bug — a publicly-reachable
+   endpoint leaking internal detail). Extracted the response-building logic
+   into `HealthEndpointResponse` (both the healthy/unhealthy path and the
+   new fail-closed exception path) so it's unit-testable without
+   `interface/globals.php`'s DB bootstrap. 5 new tests.
+2. **Tool schemas extracted to `schemas/tool-definitions.json`**, loaded via
+   a new `ToolSchemaRegistry`. This surfaced two real, previously-untested
+   bugs: the four chart tools used camelCase `inputSchema` (Anthropic's
+   wire format is snake_case `input_schema` — silently harmless only
+   because all four take no arguments), and fixing that then surfaced that
+   `json_decode(..., associative: true)` collapses an empty `properties:
+   {}` into a PHP array indistinguishable from `[]`, which the real
+   Anthropic API rejects ("Input should be an object") once the key name
+   was corrected and the tool call was no longer silently malformed in a
+   way that happened to be harmless. Both confirmed and fixed against the
+   real API, not just mocked tests. 8 new tests.
+3. **`openapi.yaml`** documents `ajax.php`'s chat endpoint plus
+   `/meta/health/livez`/`readyz` (the same three the Bruno collection
+   exercises) — validated with `@redocly/cli` (0 errors).
+- **What's left (the 2%):** two accepted Redocly style warnings ("operation
+  should have a 4xx response") on the two health endpoints, which take no
+  input and require no auth, so genuinely never produce one — a stylistic
+  lint opinion, not a real gap.
+- **Effort:** Done.
 
 ---
 
@@ -216,8 +209,9 @@ conservative rejection).
    (or explicitly scope that out).
 3. ~~**Item 3 (eval suite)**~~ — **done, ~95%**; the composed test case
    landed.
-4. **Item 4 (API contracts / health)** — the readyz fix is trivial; schema
-   extraction and an OpenAPI doc are the real work here.
+4. ~~**Item 4 (API contracts / health)**~~ — **done, ~98%**; readyz fails
+   closed, tool schemas extracted (fixing two real bugs along the way), and
+   an OpenAPI contract is committed.
 5. **Item 5 (verification layer)** — already meets `AgentForge.md`'s literal
    bar; treat as optional given the feedback's explicit steer away from
    scope expansion.
@@ -229,5 +223,5 @@ conservative rejection).
 | "full verification layer" | Item 5 | ~85% |
 | "required eval and regression suite" | Item 3 | ~95% |
 | "observability visible through a live dashboard" | Item 2 | ~65% |
-| "complete the API contracts and health/readiness checks" | Item 4 | ~80% |
+| "complete the API contracts and health/readiness checks" | Item 4 | ~98% |
 | "document actual AI spend with... scaling projections" | Item 1 | ~90% |
