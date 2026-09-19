@@ -100,29 +100,33 @@ change.
 
 ## Item 3 — Build out the required eval and regression suite
 
-**Current state: ~85%** (was ~65-70% before this session's CI fix). Test
-*design* was already strong — every test's doc comment names the failure
-mode it guards (boundary: oversized question, missing patient, no ACL;
-invariant: claims cite a called tool; regression: stale-medication guard;
-adversarial: prompt injection). The gap this session closed: the entire
-DB-backed suite (including Tier 4.1's new conversation tests) was never
-running in CI — fixed via a new step in `integration-tests.yml` plus
-`apply-schema.php` (the module's schema was never applied by a bare
-`./cli install` either, a second, previously-unknown gap that fix also
-closed). Verified: 19/19 Services tests + the full Isolated suite pass
-cleanly and now run on every PR.
+**Current state: ~95%. Done.** Test *design* was already strong — every
+test's doc comment names the failure mode it guards (boundary: oversized
+question, missing patient, no ACL; invariant: claims cite a called tool;
+regression: stale-medication guard; adversarial: prompt injection). This
+session closed two gaps:
+1. The entire DB-backed suite (including Tier 4.1's new conversation tests)
+   was never running in CI — fixed via a new step in `integration-tests.yml`
+   plus `apply-schema.php` (the module's schema was never applied by a bare
+   `./cli install` either, a second, previously-unknown gap that fix also
+   closed).
+2. Tier 2.1's adversarial case and Tier 4.1's continuity case existed only
+   independently — added
+   `injectedInstructionPersistedInFirstPatientsHistoryNeverReachesASecondPatientsConversation()`
+   (`CopilotChatControllerTest.php`), which scripts a genuine injection
+   attempt (not benign marker text) into a first patient's persisted
+   conversation turn and proves it never reaches a second patient's request
+   in the same browser session — the composition the earlier tests didn't
+   cover on their own.
 
-- **Gap:** Mostly closed. Remaining: no eval case yet exercises Tier 4.1's
-  multi-turn history *combined* with an adversarial or boundary condition
-  (e.g., a prompt-injection payload arriving in turn 2, referencing turn 1's
-  context) — Tier 2.1's adversarial case and Tier 4.1's continuity case exist
-  independently, not composed.
-- **Build:** One additional test: a second-turn question that attempts to
-  exploit persisted first-turn context (e.g., an injected instruction in a
-  first-turn reply attempting to leak into a second patient's session).
-- **Acceptance:** New test passes, documented failure mode matches the
-  existing `CopilotChatControllerTest` doc-comment convention.
-- **Effort:** S.
+Verified: 72/72 copilot tests pass (Services + Isolated), zero new PHPStan
+errors, PSR-12/Rector/codespell clean.
+- **What's left (the 5%):** nothing blocking — this is now a genuinely
+  strong eval suite by `AgentForge.md`'s own bar. Further cases (more
+  boundary conditions, more adversarial shapes) would be additive polish,
+  not gap-closing, and the feedback's own "spend less time expanding scope"
+  instruction argues against chasing that further right now.
+- **Effort:** Done.
 
 ---
 
@@ -210,7 +214,8 @@ conservative rejection).
    this surfaced is fixed. Remaining: commit a screenshot into
    `KEY_METRICS.md` as durable evidence, and live-wire `ALERTS.md`'s alerts
    (or explicitly scope that out).
-3. **Item 3 (eval suite)** — already strong; one composed test case left.
+3. ~~**Item 3 (eval suite)**~~ — **done, ~95%**; the composed test case
+   landed.
 4. **Item 4 (API contracts / health)** — the readyz fix is trivial; schema
    extraction and an OpenAPI doc are the real work here.
 5. **Item 5 (verification layer)** — already meets `AgentForge.md`'s literal
@@ -222,7 +227,7 @@ conservative rejection).
 | Feedback item | This document | Current state |
 |---|---|---|
 | "full verification layer" | Item 5 | ~85% |
-| "required eval and regression suite" | Item 3 | ~85% |
+| "required eval and regression suite" | Item 3 | ~95% |
 | "observability visible through a live dashboard" | Item 2 | ~65% |
 | "complete the API contracts and health/readiness checks" | Item 4 | ~80% |
 | "document actual AI spend with... scaling projections" | Item 1 | ~90% |
