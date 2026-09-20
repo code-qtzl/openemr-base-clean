@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinical Co-Pilot — Observability &amp; Evaluation</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-1-wash:  rgba(42,120,214,0.10);
+    --status-good:      #0ca30c;
+    --status-warning:   #fab219;
+    --status-serious:   #ec835a;
+    --status-critical:  #d03b3b;
+    --status-good-bg:    rgba(12,163,12,0.10);
+    --status-warning-bg: rgba(250,178,25,0.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-1-wash:  rgba(57,135,229,0.14);
+      --status-good:      #0ca30c;
+      --status-warning:   #fab219;
+      --status-serious:   #ec835a;
+      --status-critical:  #d03b3b;
+      --status-good-bg:    rgba(12,163,12,0.16);
+      --status-warning-bg: rgba(250,178,25,0.16);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--series-1); }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  header.page-header {
+    margin-bottom: 32px;
+  }
+  header.page-header h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  header.page-header p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 70ch;
+    line-height: 1.5;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .pill {
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  nav.jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  nav.jump a {
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--text-secondary);
+  }
+  nav.jump a:hover { color: var(--series-1); }
+
+  section { margin-bottom: 44px; }
+  section > h2 {
+    font-size: 18px;
+    margin: 0 0 4px;
+    scroll-margin-top: 16px;
+  }
+  section > .section-sub {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0 0 18px;
+    max-width: 76ch;
+    line-height: 1.5;
+  }
+
+  /* Stat tiles */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .stat-tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .stat-tile .label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .stat-tile .value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .stat-tile .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card + .card { margin-top: 12px; }
+
+  /* Status badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px 3px 7px;
+    border-radius: 999px;
+  }
+  .badge.good { color: var(--status-good); background: var(--status-good-bg); }
+  .badge.warning { color: #8a5a00; background: var(--status-warning-bg); }
+  @media (prefers-color-scheme: dark) {
+    .badge.warning { color: var(--status-warning); }
+  }
+  .badge svg { width: 12px; height: 12px; flex: none; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--gridline);
+  }
+  th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 12px;
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .table-scroll { overflow-x: auto; }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.total td { font-weight: 600; border-top: 1px solid var(--baseline); }
+
+  /* Bar chart */
+  .chart-card { display: grid; grid-template-columns: 1fr; gap: 22px; }
+  @media (min-width: 720px) {
+    .chart-card { grid-template-columns: 1.1fr 1fr; align-items: center; }
+  }
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 22px;
+    height: 180px;
+    padding-top: 26px;
+    border-bottom: 1px solid var(--baseline);
+    position: relative;
+  }
+  .bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+    cursor: default;
+  }
+  .bar-col .bar-value {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bar-col .bar {
+    width: 100%;
+    max-width: 56px;
+    background: var(--series-1);
+    border-radius: 4px 4px 0 0;
+  }
+  .bar-col .bar-label {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.3;
+  }
+  .bar-col[title]:hover .bar { filter: brightness(1.08); }
+
+  /* Metric cards grid */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .metric-card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .metric-card .metric-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .metric-card .metric-row {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+  .metric-card .metric-row b { color: var(--text-primary); font-weight: 600; }
+
+  /* Bug list */
+  ul.bug-list { list-style: none; margin: 0; padding: 0; }
+  ul.bug-list li {
+    display: flex;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--gridline);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  ul.bug-list li:last-child { border-bottom: none; }
+  ul.bug-list li > span { min-width: 0; }
+  ul.bug-list svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--status-good); }
+  ul.bug-list b { font-weight: 600; }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+  footer a { color: var(--text-secondary); }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 780px) {
+    .two-col { grid-template-columns: 1fr 1fr; align-items: start; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="page-header">
+    <h1>Clinical Co-Pilot — Observability &amp; Evaluation</h1>
+    <p>
+      A snapshot of the evidence behind the Clinical Co-Pilot's Observability and Evaluation
+      requirements — real eval-suite results, real measured cost, and live alert configuration,
+      pulled from this project's own <code>KEY_METRICS.md</code>, <code>EVAL_RESULTS.md</code>,
+      <code>AI_SPEND.md</code>, and <code>ALERTS.md</code>. The agent itself and its verification
+      layer live in the patient chart inside OpenEMR proper; this page is the supporting evidence
+      for what you can't see just by using the chat panel.
+    </p>
+    <div class="meta-row">
+      <span class="pill">Snapshot as of 2026-09-19</span>
+      <span class="pill">Source SHAs: fc7326004c / 3f82c71789</span>
+      <span class="pill">Static data — regenerated on each deploy, not live-queried</span>
+    </div>
+    <nav class="jump">
+      <a href="#evaluation">Evaluation</a>
+      <a href="#key-metrics">Key metrics</a>
+      <a href="#cost">Cost</a>
+      <a href="#alerts">Alerts</a>
+      <a href="/">← Back to OpenEMR</a>
+    </nav>
+  </header>
+
+  <section id="evaluation">
+    <h2>Evaluation</h2>
+    <p class="section-sub">
+      The PHPUnit eval &amp; regression suite — <code>EVAL_RESULTS.md</code>. A real run, not a
+      description of intended coverage: same commands, same paths CI runs on every push.
+    </p>
+
+    <div class="stat-grid" style="margin-bottom:14px;">
+      <div class="stat-tile">
+        <div class="label">Tests</div>
+        <div class="value">111</div>
+        <div class="sub">0 failures · 0 errors · 0 skipped</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Assertions</div>
+        <div class="value">539</div>
+        <div class="sub">across both suites</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">DB-backed suite</div>
+        <div class="value">22</div>
+        <div class="sub">78 assertions · OK</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Isolated suite</div>
+        <div class="value">89</div>
+        <div class="sub">461 assertions · OK</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="metric-name" style="font-size:13px;font-weight:600;margin-bottom:10px;">
+        Real bugs this suite has caught
+      </div>
+      <ul class="bug-list">
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>CI never ran the DB-backed suite</b>, and a bare install never applied the module's schema either — two independent gaps, both fixed.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>Tool schemas used camelCase <code>inputSchema</code></b> instead of Anthropic's snake_case wire format — silently harmless only because the affected tools took no arguments; confirmed and fixed against the real API.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b><code>json_decode</code> collapsed an empty JSON object into an empty array</b>, which the real Anthropic API rejected with a 400 once the key-name bug above was fixed.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>The exception path never called the Langfuse tracer</b> — a failing request produced no trace at all, invisible on the dashboard even though the error log recorded it correctly.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b><code>/readyz</code> fell through to HTTP 200 with the exception message echoed into the body</b> — both a readiness-signal bug and an information-leak violation. Fixed fail-closed.</span>
+        </li>
+        <li>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>48% of this fork's own seeded active-problem rows</b> (2,943 of 6,126) carry an onset date over 20 years old with no resolution date, still marked active — a real data-quality finding from a live query, not a synthetic fixture.</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="key-metrics">
+    <h2>Key metrics</h2>
+    <p class="section-sub">
+      What "success" means for this agent's target user — <code>KEY_METRICS.md</code>. Four of
+      six primary metrics are measurable today; the other two are named honestly as blocked or
+      not-yet-instrumented rather than hidden.
+    </p>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-name">1 · Claim-Grounding Rate <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Measurable</span></div>
+        <div class="metric-row">% of claims passing source-attribution check. <b>Target 99%+.</b></div>
+        <div class="metric-row">Measured via the verification layer's pass/fail log.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-name">2 · Verified Incident Rate <span class="badge warning"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6v5M10 13.5h.01" stroke-linecap="round"/></svg>Blocked</span></div>
+        <div class="metric-row">Clinician-flagged errors per 1,000 conversations. <b>Target zero-tolerance.</b></div>
+        <div class="metric-row">Needs the "flag this answer" button — not yet built.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-name">3 · p95 Time-to-Answer <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Measurable</span></div>
+        <div class="metric-row">95th-percentile latency, single-tool vs multi-tool. "Seconds not minutes."</div>
+        <div class="metric-row">Measured via Langfuse tracing.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-name">4 · Audit Completeness Rate <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Measurable</span></div>
+        <div class="metric-row">% of conversations with a fully populated audit-log row. <b>Target 100%.</b></div>
+        <div class="metric-row">Measured via count query on <code>clinical_copilot_log</code>.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-name">5 · Adoption Rate per Eligible Visit <span class="badge warning"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6v5M10 13.5h.01" stroke-linecap="round"/></svg>No data yet</span></div>
+        <div class="metric-row">% of visits where the co-pilot was actually opened and used.</div>
+        <div class="metric-row">Instrumentable now — no value until real clinician usage exists.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-name">6 · Cross-Patient Access Integrity <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Measurable</span></div>
+        <div class="metric-row">Tool invocations where audit patient id ≠ session patient id. <b>Target 0 always</b> — security canary.</div>
+        <div class="metric-row">No new instrumentation needed.</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="metric-name" style="font-size:13px;font-weight:600;margin-bottom:8px;">Secondary metrics (operational health)</div>
+      <div class="metric-row">Tool failure rate — DB/query health signal, not a trust signal.</div>
+      <div class="metric-row">Cost per conversation — <b>$0.076/question</b> average (range $0.035–$0.11), see Cost below.</div>
+      <div class="metric-row">p95/p99 latency under 10 and 50 concurrent users — infrastructure capacity, see Cost below.</div>
+    </div>
+  </section>
+
+  <section id="cost">
+    <h2>Cost</h2>
+    <p class="section-sub">
+      Real, measured token counts against real chart data — not estimated. <code>AI_SPEND.md</code>,
+      <code>claude-opus-5</code>, Anthropic's published per-token rate as of 2026-09-19.
+    </p>
+
+    <div class="card chart-card">
+      <div>
+        <div style="font-size:13px;font-weight:600;margin-bottom:2px;">Cost per question (3 real requests)</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;">single series — one real question each, same patient chart</div>
+        <div class="bars">
+          <div class="bar-col" title="&quot;What conditions does this patient have on file?&quot; — get_active_problems — 15,526 in / 1,435 out tokens — 17.4s">
+            <div class="bar-value">$0.114</div>
+            <div class="bar" style="height:100%;"></div>
+            <div class="bar-label">Conditions<br>on file</div>
+          </div>
+          <div class="bar-col" title="&quot;What medications is this patient currently taking?&quot; — get_medications — 4,829 in / 442 out tokens — 7.8s">
+            <div class="bar-value">$0.035</div>
+            <div class="bar" style="height:31%;"></div>
+            <div class="bar-label">Current<br>medications</div>
+          </div>
+          <div class="bar-col" title="&quot;What was the result of their most recent A1c, and is it trending up or down?&quot; — get_a1c_series — 11,348 in / 885 out tokens — 13.4s">
+            <div class="bar-value">$0.079</div>
+            <div class="bar" style="height:69%;"></div>
+            <div class="bar-label">Recent A1c<br>trend</div>
+          </div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Question</th><th class="num">In / out tok.</th><th class="num">Cost</th><th class="num">Latency</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Conditions on file</td><td class="num">15,526 / 1,435</td><td class="num">$0.1135</td><td class="num">17.4s</td></tr>
+            <tr><td>Current medications</td><td class="num">4,829 / 442</td><td class="num">$0.0352</td><td class="num">7.8s</td></tr>
+            <tr><td>Recent A1c trend</td><td class="num">11,348 / 885</td><td class="num">$0.0789</td><td class="num">13.4s</td></tr>
+            <tr class="total"><td>Average</td><td class="num">10,568 / 921</td><td class="num">$0.0759</td><td class="num">12.9s</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Scaling projection ($/month, 21 clinic days)</div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>Scale</th><th class="num">Physicians</th><th class="num">Low (1.0 q/pt)</th><th class="num">Mid (1.4 q/pt)</th><th class="num">High (2.0 q/pt)</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>One physician</td><td class="num">1</td><td class="num">$35</td><td class="num">$49</td><td class="num">$70</td></tr>
+            <tr><td>Small practice</td><td class="num">5</td><td class="num">$175</td><td class="num">$245</td><td class="num">$350</td></tr>
+            <tr><td>Clinic / small hospital</td><td class="num">50</td><td class="num">$1,752</td><td class="num">$2,453</td><td class="num">$3,505</td></tr>
+            <tr><td>Hospital system</td><td class="num">500</td><td class="num">$17,523</td><td class="num">$24,532</td><td class="num">$35,045</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="metric-row" style="margin-top:12px;">
+        Base rate $0.0759/question × 22 patients/day (midpoint). <b>No architectural change required</b>
+        up to 5 physicians. At 50+, <code>PERFORMANCE_BASELINE.md</code>'s load test (28% error rate at
+        50 concurrent users, even with a mocked/instant LLM call) makes horizontal autoscaling and moving
+        the LLM call chain off the request-handling worker pool a requirement, not an optimization —
+        see <code>AI_SPEND.md</code>'s "Architectural changes needed at each scale."
+      </div>
+    </div>
+  </section>
+
+  <section id="alerts">
+    <h2>Alerts</h2>
+    <p class="section-sub">
+      Three alerts on top of the Langfuse dashboard — <code>ALERTS.md</code>. Thresholds are
+      derived from <code>PERFORMANCE_BASELINE.md</code>'s measured numbers, not picked blind.
+    </p>
+    <div class="two-col">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+          <div style="font-size:13px;font-weight:600;">1 · p95 chat latency &gt; 37s</div>
+          <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Live</span>
+        </div>
+        <div class="metric-row">15-minute rolling window, root-span latency. Threshold = 2× the real-API smoke pass's measured p95 (18.5s).</div>
+        <div class="metric-row"><b>On-call:</b> Anthropic status page first, then instance CPU/memory saturation.</div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+          <div style="font-size:13px;font-weight:600;">2 · Error rate &gt; 5%</div>
+          <span class="badge warning"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6v5M10 13.5h.01" stroke-linecap="round"/></svg>Not live</span>
+        </div>
+        <div class="metric-row">5-minute window, non-2xx <code>ajax.php</code> responses. Trace data now exists (<code>traceFailure()</code>); blocked purely by the connected Langfuse plan's 2-live-alert cap, not a data gap.</div>
+        <div class="metric-row"><b>On-call:</b> <code>/meta/health/readyz</code> first, then recent deploys, then Anthropic status.</div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+          <div style="font-size:13px;font-weight:600;">3 · Tool failure rate &gt; 2%</div>
+          <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>Live</span>
+        </div>
+        <div class="metric-row">15-minute window across the 4 chart-reading tools. Baseline observed 0 failures across ~800 mocked-load requests, so the threshold is a generous margin above that.</div>
+        <div class="metric-row"><b>On-call:</b> DB connectivity first, then schema-migration mismatch.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      This page is a static snapshot generated from the project's own markdown artifacts
+      (<code>KEY_METRICS.md</code>, <code>EVAL_RESULTS.md</code>, <code>AI_SPEND.md</code>,
+      <code>ALERTS.md</code>) at build time — it does not query the live database or Langfuse on
+      page load, and refreshes on the same cadence those documents do (each redeploy). It is
+      reachable with no login: the content is aggregate cost/eval/alert data, not patient
+      information.
+    </p>
+    <p>
+      Full narrative detail, methodology, and known limitations for every number above live in
+      those source documents in the project repository.
+    </p>
+  </footer>
+
+</div>
+</body>
+</html>
