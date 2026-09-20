@@ -86,6 +86,15 @@ SMOKE=1 SMOKE_REQUESTS=6 BASE_URL=http://localhost:8300 \
   --summary-export=tests/loadtest/results/real-local-smoke.json \
   | tee tests/loadtest/results/real-local-smoke.txt
 
+# Real-API pass at a small concurrency level (answers "does real-LLM
+# latency hold up under concurrency", which the sequential smoke pass
+# above can't -- run with ANTHROPIC_BASE_URL unset/blank, same as SMOKE):
+BASE_URL=http://localhost:8300 LEVEL_VUS=3 LEVEL_RAMP=10s LEVEL_DURATION=45s \
+  k6 run --summary-trend-stats="avg,min,med,max,p(50),p(90),p(95),p(99)" \
+  tests/loadtest/k6-copilot-chat.js \
+  --summary-export=tests/loadtest/results/real-local-concurrent-3vu.json \
+  | tee tests/loadtest/results/real-local-concurrent-3vu.txt
+
 # Railway smoke pass (once OE_ADMIN_PASSWORD is available locally -- see the
 # matrix above): copy railway.bru's baseUrl, then e.g.
 BASE_URL=https://openemr-production-a819.up.railway.app PASSWORD='<OE_ADMIN_PASSWORD>' \
@@ -115,6 +124,10 @@ BASE_URL=https://openemr-production-a819.up.railway.app PASSWORD='<OE_ADMIN_PASS
   criterion.
 - `real-local-smoke.{txt,json}` -- the small real-API sequential pass
   against local docker.
+- `real-local-concurrent-3vu.{txt,json}` -- real-API pass at 3 concurrent
+  VUs against local docker (`LEVEL_VUS=3 LEVEL_RAMP=10s LEVEL_DURATION=45s`),
+  answering the sequential pass's own open question: does real-LLM latency
+  hold up under concurrency, not just one request after another.
 - `real-railway-smoke.*` -- not present in this commit; blocked, see the
   matrix above.
 

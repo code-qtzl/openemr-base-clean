@@ -70,22 +70,59 @@ looks like under concurrency, only about how much of the total request time
 is *not* the LLM call. All 6 real requests returned `verificationPassed:
 true` with correctly cited claims.
 
+## Local docker, real Anthropic API, concurrent (3 VU)
+
+Answers the sequential pass's own open question directly above: what does
+real-LLM latency look like *under concurrency*, not just one request after
+another. 3 concurrent VUs (`LEVEL_VUS=3`), 10s ramp + 45s hold, same patient
+(`pid=1`, 68 active problems / 6 active medications -- real, sizable
+Synthea data, not a thin fixture), full `login -> select-patient ->
+extract-CSRF -> ask` flow per iteration, real random question each time.
+
+| Requests | p50 | p90 | p95 | p99 | Error rate |
+|---------:|----:|----:|----:|----:|-----------:|
+| 14 | 7.98s | 15.06s | 16.59s | 17.17s | 0.0% |
+
+Raw output: `tests/loadtest/results/real-local-concurrent-3vu.{txt,json}`.
+
+**p50 here (7.98s) is lower than the sequential pass's p50 (13.2s), p99 is
+close (17.17s vs. 18.9s).** Read this as sample variance and question mix
+(4 different questions, randomly drawn, each with a different tool-call
+count and payload size -- see `AI_SPEND.md`'s per-question cost table for
+how much that varies) across a slightly larger sample (14 vs. 6 requests),
+not evidence that concurrency makes individual requests faster. What it
+does show: at this concurrency level (3 simultaneous real-LLM
+conversations), latency stayed in the same order of magnitude as sequential
+and the error rate held at 0% -- no sign of request queuing, PHP-FPM/Apache
+worker starvation, or Anthropic-side throttling at 3 concurrent users
+against this local instance. That is a genuinely different question from
+the sequential pass, and this is real evidence for it, not an assumption
+carried over from the mocked-concurrency numbers above.
+
 ## Railway (live deployment), real Anthropic API
 
-**Not captured.** `docker/release/railway/harden.php` rotates the Railway
-deployment's admin password away from the `admin`/`pass` default on every
-boot (it's publicly reachable) via the `OE_ADMIN_PASSWORD` service
+**Still not captured.** `docker/release/railway/harden.php` rotates the
+Railway deployment's admin password away from the `admin`/`pass` default on
+every boot (it's publicly reachable) via the `OE_ADMIN_PASSWORD` service
 variable. Retrieving that value via `railway variables` was correctly
-refused by this session's permission classifier as a credential-exposure
-risk, so the k6 login flow could not authenticate against Railway. See
-`tests/loadtest/README.md`'s matrix for exactly what's needed to fill this
-in (the login credential, then the commands are already written).
+refused as a credential-exposure risk on the session that first hit this
+gap, and remains something this project's automation should not do itself
+-- see `tests/loadtest/README.md`'s matrix for exactly what's needed to
+fill this in (the login credential, then the commands are already
+written). Whoever holds `OE_ADMIN_PASSWORD` can run the README's "Railway
+smoke pass" command directly (5 VUs, ~1 minute, deliberately small since
+this is the one live, publicly-reachable deployment) to close this
+specific remaining piece.
 
 **Practical implication**: `ALERTS.md`'s thresholds below are keyed to the
 local-docker mocked baseline, not a Railway-measured one. Local docker and
 Railway are different container sizing/CPU allocation, so a Railway p95 in
-practice will differ from the local number -- recalibrate `ALERTS.md`'s
-thresholds once a Railway run exists.
+practice will differ from the local numbers above -- recalibrate
+`ALERTS.md`'s thresholds once a Railway run exists. The local concurrent
+real-API numbers above narrow this gap (real concurrency behavior is now
+measured somewhere) but do not close it -- Railway's CPU/memory allocation
+and network path to Anthropic are both different from this machine's
+Docker Desktop.
 
 ## Caveats
 
