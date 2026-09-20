@@ -31,6 +31,8 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtur
 use DateTimeImmutable;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
@@ -205,6 +207,33 @@ final class CopilotServiceTest extends TestCase
         self::assertInstanceOf(MedicationRow::class, $row);
         self::assertNotNull($row->staleWarning);
         self::assertStringContainsString('no end date recorded', $row->staleWarning);
+    }
+
+    /**
+     * Failure mode guarded against: PUNCH_LIST_2.md Item 5's second domain
+     * constraint -- an "active" problem-list entry with no resolved_date
+     * and an onset old enough to doubt must carry ActiveProblemStalenessPolicy's
+     * advisory warning, the same way MedicationStalenessPolicy already does
+     * for prescriptions. A live query against this fork's own seeded data
+     * found this shape in 48% of active problem rows (see the policy's own
+     * docblock) -- not a hypothetical case.
+     */
+    #[Test]
+    public function unresolvedDecadesOldActiveProblemCarriesStalenessWarning(): void
+    {
+        $twentyFiveYearsAgo = (new DateTimeImmutable('-25 years'))->format('Y-m-d');
+        $this->fixtures->seedActiveProblem($this->pid, 'Essential hypertension', 'I10', $twentyFiveYearsAgo);
+
+        $result = $this->tools()->call('get_active_problems');
+
+        self::assertInstanceOf(ActiveProblemsResult::class, $result);
+        self::assertTrue($result->ok);
+        self::assertCount(1, $result->rows);
+
+        $row = $result->rows[0];
+        self::assertInstanceOf(ActiveProblemRow::class, $row);
+        self::assertNotNull($row->staleWarning);
+        self::assertStringContainsString('no resolution date', $row->staleWarning);
     }
 
     private function tools(): ChartContextTools

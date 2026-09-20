@@ -22,6 +22,7 @@ require_once $moduleSrc . '/Service/AnthropicClientFactory.php';
 require_once $moduleSrc . '/Service/DefaultAnthropicClientFactory.php';
 require_once $moduleSrc . '/Service/AskResult.php';
 require_once $moduleSrc . '/Service/MedicationStalenessPolicy.php';
+require_once $moduleSrc . '/Service/ActiveProblemStalenessPolicy.php';
 require_once $moduleSrc . '/Service/Conversation/ConversationRole.php';
 require_once $moduleSrc . '/Service/Conversation/ConversationTurn.php';
 require_once $moduleSrc . '/Service/Conversation/Conversation.php';

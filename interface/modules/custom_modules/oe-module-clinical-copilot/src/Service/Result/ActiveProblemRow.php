@@ -20,6 +20,13 @@ final readonly class ActiveProblemRow implements ToolResultRow
         public ?string $onsetDate,
         public ?string $resolvedDate,
         public ?string $outcome,
+        /**
+         * Set by ActiveProblemStalenessPolicy when this row is unresolved
+         * (no resolved_date) and old enough that `activity = 1` alone is
+         * not good evidence the condition is still relevant -- see
+         * PUNCH_LIST_2.md Item 5. Null when the row needs no such caveat.
+         */
+        public ?string $staleWarning = null,
     ) {
     }
 
@@ -32,6 +39,7 @@ final readonly class ActiveProblemRow implements ToolResultRow
             'onset_date' => $this->onsetDate,
             'resolved_date' => $this->resolvedDate,
             'outcome' => $this->outcome,
+            'stale_warning' => $this->staleWarning,
         ];
     }
 }

@@ -217,7 +217,7 @@ final readonly class ChartContextTools
             return ActiveProblemsResult::failed('Could not retrieve that part of the chart.');
         }
 
-        return ActiveProblemsResult::ok(array_map(self::mapActiveProblemRow(...), $records));
+        return ActiveProblemsResult::ok(array_map($this->mapActiveProblemRow(...), $records));
     }
 
     /**
@@ -228,14 +228,18 @@ final readonly class ChartContextTools
      *
      * @param array<array-key, mixed> $row
      */
-    private static function mapActiveProblemRow(array $row): ActiveProblemRow
+    private function mapActiveProblemRow(array $row): ActiveProblemRow
     {
+        $onsetDate = self::nullableString($row['onset_date'] ?? null);
+        $resolvedDate = self::nullableString($row['resolved_date'] ?? null);
+
         return new ActiveProblemRow(
             title: self::nullableString($row['title'] ?? null),
             diagnosis: self::nullableString($row['diagnosis'] ?? null),
-            onsetDate: self::nullableString($row['onset_date'] ?? null),
-            resolvedDate: self::nullableString($row['resolved_date'] ?? null),
+            onsetDate: $onsetDate,
+            resolvedDate: $resolvedDate,
             outcome: self::nullableString($row['outcome'] ?? null),
+            staleWarning: ActiveProblemStalenessPolicy::warningFor($onsetDate, $resolvedDate, $this->clock->now()),
         );
     }
 

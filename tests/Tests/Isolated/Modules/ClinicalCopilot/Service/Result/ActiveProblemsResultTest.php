@@ -43,10 +43,37 @@ class ActiveProblemsResultTest extends TestCase
                     'onset_date' => '2019-03-01',
                     'resolved_date' => null,
                     'outcome' => 'improving',
+                    'stale_warning' => null,
                 ],
             ],
             'error' => null,
         ], $result->toArray());
+    }
+
+    public function testStaleWarningIsCarriedThroughToArray(): void
+    {
+        // PUNCH_LIST_2.md Item 5: a decades-old, unresolved "active" problem
+        // must surface its staleness warning to the model, not just the raw
+        // dates -- mirrors MedicationsResult's own staleness handling.
+        $rows = [
+            new ActiveProblemRow(
+                'Essential hypertension',
+                'I10',
+                '1946-10-07',
+                null,
+                'unresolved',
+                'Onset recorded 79 year(s) ago with no resolution date -- confirm this is still relevant '
+                    . 'before relying on it.',
+            ),
+        ];
+
+        $result = ActiveProblemsResult::ok($rows);
+
+        self::assertSame(
+            'Onset recorded 79 year(s) ago with no resolution date -- confirm this is still relevant '
+                . 'before relying on it.',
+            $result->toArray()['rows'][0]['stale_warning'],
+        );
     }
 
     public function testFailedCarriesErrorAndNoRows(): void
