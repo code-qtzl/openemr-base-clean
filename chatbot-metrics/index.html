@@ -55,6 +55,7 @@
     -webkit-font-smoothing: antialiased;
   }
   a { color: var(--series-1); }
+  code { overflow-wrap: anywhere; }
   .wrap {
     max-width: 1080px;
     margin: 0 auto;
@@ -312,8 +313,8 @@
       for what you can't see just by using the chat panel.
     </p>
     <div class="meta-row">
-      <span class="pill">Snapshot as of 2026-09-19</span>
-      <span class="pill">Source SHAs: fc7326004c / 3f82c71789</span>
+      <span class="pill">Snapshot as of 2026-09-20</span>
+      <span class="pill">Source SHA: 81e568b966</span>
       <span class="pill">Static data — regenerated on each deploy, not live-queried</span>
     </div>
     <nav class="jump">
@@ -335,23 +336,41 @@
     <div class="stat-grid" style="margin-bottom:14px;">
       <div class="stat-tile">
         <div class="label">Tests</div>
-        <div class="value">111</div>
+        <div class="value">114</div>
         <div class="sub">0 failures · 0 errors · 0 skipped</div>
       </div>
       <div class="stat-tile">
         <div class="label">Assertions</div>
-        <div class="value">539</div>
+        <div class="value">553</div>
         <div class="sub">across both suites</div>
       </div>
       <div class="stat-tile">
         <div class="label">DB-backed suite</div>
-        <div class="value">22</div>
-        <div class="sub">78 assertions · OK</div>
+        <div class="value">25</div>
+        <div class="sub">92 assertions · OK</div>
       </div>
       <div class="stat-tile">
         <div class="label">Isolated suite</div>
         <div class="value">89</div>
         <div class="sub">461 assertions · OK</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px;">
+      <div class="metric-name" style="font-size:13px;font-weight:600;margin-bottom:10px;">
+        Real-model correctness eval <span class="badge good"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10.5l4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/></svg>3/3 passed</span>
+      </div>
+      <div class="metric-row">
+        The suite above scripts the model's responses to test the surrounding code, not whether the
+        real model's answers are correct. <code>tests/eval/clinical-copilot-correctness-eval.php</code>
+        seeds known ground truth and checks the real Anthropic API's actual reply against it — active-problem
+        recall, medication recall, and A1c trend direction all passed against <code>claude-opus-5</code> on 2026-09-20.
+      </div>
+      <div class="metric-row">
+        Wired into <code>.github/workflows/eval.yml</code> on manual trigger and a weekly schedule (not every PR —
+        it costs real spend and isn't fully deterministic). That workflow isn't live yet: this project's
+        real CI is GitLab, which has no runner configured, and no GitHub mirror exists to run Actions on —
+        documented, not hidden, in <code>EVAL_RESULTS.md</code>.
       </div>
     </div>
 
@@ -432,7 +451,8 @@
       <div class="metric-name" style="font-size:13px;font-weight:600;margin-bottom:8px;">Secondary metrics (operational health)</div>
       <div class="metric-row">Tool failure rate — DB/query health signal, not a trust signal.</div>
       <div class="metric-row">Cost per conversation — <b>$0.076/question</b> average (range $0.035–$0.11), see Cost below.</div>
-      <div class="metric-row">p95/p99 latency under 10 and 50 concurrent users — infrastructure capacity, see Cost below.</div>
+      <div class="metric-row">p95/p99 latency under 10 and 50 concurrent users (mocked LLM) — infrastructure capacity, see Cost below.</div>
+      <div class="metric-row">Real Anthropic API under concurrency (3 VU, local) — <b>p50 7.98s, p95 16.59s</b>, 0% errors — same order of magnitude as sequential, no sign of worker starvation at this level. Railway (live) real-API latency remains unmeasured — see <code>PERFORMANCE_BASELINE.md</code>.</div>
     </div>
   </section>
 

@@ -11,8 +11,8 @@ description of what the suite is supposed to do.
 
 ## Run record
 
-- **Date:** 2026-09-19
-- **Git SHA:** `fc7326004c` (HEAD at time of this run)
+- **Date:** 2026-09-20
+- **Git SHA:** `81e568b966` (HEAD at time of this run)
 - **Environment:** `development-easy` docker stack, run as the `apache` user
   inside the `openemr` container (same execution context CI uses)
 - **Commands run, verbatim:**
@@ -25,13 +25,13 @@ description of what the suite is supposed to do.
 
 ## Result
 
-**111 tests, 539 assertions, 0 failures, 0 errors, 0 skipped.**
+**114 tests, 553 assertions, 0 failures, 0 errors, 0 skipped.**
 
 | Suite | Tests | Assertions | Result |
 |---|---:|---:|---|
-| DB-backed (`tests/Tests/Services/Modules/ClinicalCopilot`) | 22 | 78 | OK |
+| DB-backed (`tests/Tests/Services/Modules/ClinicalCopilot`) | 25 | 92 | OK |
 | Isolated (`tests/Tests/Isolated/Modules/ClinicalCopilot` + `.../Health`) | 89 | 461 | OK |
-| **Total** | **111** | **539** | **OK** |
+| **Total** | **114** | **553** | **OK** |
 
 This is not a subset or a cherry-picked run — it's every test PHPUnit
 discovers under both paths, the same paths `.github/workflows/integration-tests.yml`
@@ -69,29 +69,36 @@ flagged; just-under-the-threshold is not flagged; at-the-threshold is
 flagged; null onset date is not flagged; malformed onset date is not
 flagged; future onset date is not flagged.
 
-**Copilot Service** (DB-backed) — 7 tests: empty chart produces honest
+**Copilot Service** (DB-backed) — 8 tests: empty chart produces honest
 insufficient-information reply; empty chart rejects a claim with no
 supporting tool call; claim citing a tool actually called passes; claim
 citing a tool never called is rejected; truthful zero-medications claim is
 conservatively rejected (known limitation, documented not hidden); open-ended
 old prescription carries staleness warning; unresolved decades-old active
-problem carries staleness warning.
+problem carries staleness warning; **chart tool output is delimited as
+untrusted data in the outgoing request** (AUDIT_Extra.md F2 prompt-injection
+mitigation — asserts the actual wire body, not just that a wrapping method
+exists).
 
 ### Boundary / authorization / adversarial (`PUNCH_LIST.md` Tier 2 + `PUNCH_LIST_2.md` Item 3)
 
-**Copilot Chat Controller** (DB-backed) — 10 tests: oversized question is
-rejected before any copilot work; stale CSRF token is rejected before
-anything else; user without patients ACL never reaches patient data; missing
-API key degrades to a generic error without leaking the exception message;
-exception path still produces a Langfuse trace tagged error without leaking
-the exception message; **prompt injection in chart data never leaks another
-patient's data** (adversarial); happy path returns a verified reply with a
-correlation ID; follow-up question in the same session and patient carries
-prior turns forward (Tier 4.1 multi-turn); new patient in the same session
-never sees a prior patient's conversation (isolation invariant); **injected
-instruction persisted in one patient's history never reaches a second
-patient's conversation** (composed adversarial + isolation case — the one
-`PUNCH_LIST_2.md` Item 3 added this session).
+**Copilot Chat Controller** (DB-backed) — 12 tests: oversized question is
+rejected before any copilot work; **request over the rate limit is rejected
+before any copilot work** and **the rate limit resets after the window
+elapses** (a sliding-window per-session cap on real Anthropic spend, proven
+with a mutable test clock rather than a real sleep); stale CSRF token is
+rejected before anything else; user without patients ACL never reaches
+patient data; missing API key degrades to a generic error without leaking
+the exception message; exception path still produces a Langfuse trace
+tagged error without leaking the exception message; **prompt injection in
+chart data never leaks another patient's data** (adversarial); happy path
+returns a verified reply with a correlation ID; follow-up question in the
+same session and patient carries prior turns forward (Tier 4.1 multi-turn);
+new patient in the same session never sees a prior patient's conversation
+(isolation invariant); **injected instruction persisted in one patient's
+history never reaches a second patient's conversation** (composed
+adversarial + isolation case — the one `PUNCH_LIST_2.md` Item 3 added this
+session).
 
 ### Multi-turn state (`PUNCH_LIST.md` Tier 4.1)
 
