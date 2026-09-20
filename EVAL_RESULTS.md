@@ -194,6 +194,44 @@ its own regression test above so it cannot silently regress:
    this fork's own database, not a synthetic test fixture, that justified
    and now backs `ActiveProblemStalenessPolicy`.
 
+## Real-model correctness eval (2026-09-20)
+
+Everything above is the PHPUnit suite, which scripts the model's responses
+(`ScriptedAnthropicClientFactory`) to test the surrounding code — citation
+verification, staleness policies, audit logging — deterministically and for
+free. It cannot tell you whether the real model's answers are actually
+correct. `tests/eval/clinical-copilot-correctness-eval.php` closes that gap:
+it seeds a patient with exact, known ground truth (a diabetes diagnosis, an
+active metformin prescription, two A1c results establishing a clear upward
+trend) and checks the real Anthropic API's actual reply against that ground
+truth on three questions (active-problem recall, medication recall, A1c
+trend direction).
+
+**Real run, 2026-09-20:** 3/3 cases passed against `claude-opus-5`, run
+manually inside the `development-easy` container (`docker exec -u apache
+... php tests/eval/clinical-copilot-correctness-eval.php`) — verified via the
+project's own dev stack, not the CI defined below, since that CI is not
+currently live (see the CI-status note).
+
+`.github/workflows/eval.yml` wires this into CI on `workflow_dispatch` and a
+weekly schedule — deliberately not on every PR, since it costs real
+Anthropic spend (~$0.30/run) and the model's exact wording isn't fully
+deterministic, so it shouldn't gate merges the way the free scripted suite
+does.
+
+**CI-status note:** this project's live CI is GitLab (`.gitlab-ci.yml`, this
+repo's actual remote), which today only has a dormant `deploy` stage (no
+runner configured). The `.github/workflows/*.yml` files — `integration-tests.yml`
+included, not just the new `eval.yml` — are inherited from upstream
+`openemr/openemr` on GitHub and do not currently execute anywhere for this
+fork; there is no GitHub mirror. They remain accurate, ready-to-run
+definitions (this is also why `integration-tests.yml`'s Clinical Co-Pilot
+step, cited earlier in this document, has never actually gated a real merge
+here). Whoever eventually connects a GitHub mirror or a GitLab runner also
+needs to add an `OPENEMR__COPILOT_API_KEY` secret before `eval.yml` can call
+the real API — until then it skips itself cleanly with a warning rather than
+failing on a missing key.
+
 ## What this is not
 
 - **Not a CI run's own output.** This is a manual run against the same
@@ -205,7 +243,8 @@ its own regression test above so it cannot silently regress:
   artifacts with their own real results: `PERFORMANCE_BASELINE.md` (k6 +
   real-Anthropic-API latency) and `AI_SPEND.md` (real token/cost
   measurement via `tests/loadtest/real-api-cost-smoke.php`). This document
-  covers only the PHPUnit eval/regression suite proper.
+  covers only the PHPUnit eval/regression suite proper, plus the real-model
+  correctness eval documented just above.
 - **Not exhaustive.** `PUNCH_LIST_2.md` Item 3 already names the accepted
   gap: both staleness-policy families share one known, disclosed limitation
   (can't distinguish a truthful negative claim from a hallucinated one at

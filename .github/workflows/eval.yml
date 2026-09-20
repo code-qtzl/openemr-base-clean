@@ -1,0 +1,94 @@
+##
+# Clinical Co-Pilot real-model correctness eval.
+#
+# integration-tests.yml already runs the Clinical Co-Pilot's PHPUnit
+# regression suite (tests/Tests/Services/Modules/ClinicalCopilot) on every
+# PR -- but that suite scripts the model's responses (see EVAL_RESULTS.md),
+# so it verifies the surrounding code, never whether the real model's
+# answers are actually clinically correct. This workflow closes that gap by
+# running tests/eval/clinical-copilot-correctness-eval.php against the real
+# Anthropic API and known, seeded ground truth.
+#
+# Deliberately NOT on `pull_request`:
+#   - it costs real Anthropic spend on every run (~$0.30/run, per
+#     AI_SPEND.md's per-question rates for three questions)
+#   - the model's exact wording is not fully deterministic, so it does not
+#     belong in the suite that gates merges
+#   - GitHub Actions never exposes repo secrets to a fork PR's workflow run
+#     anyway, so wiring this to `pull_request` would only produce confusing
+#     failures on external contributions, never real coverage
+#
+# workflow_dispatch covers "run it now"; the weekly schedule covers "did a
+# change quietly regress answer quality" without adding cost or flakiness
+# risk to every push.
+
+name: Clinical Co-Pilot correctness eval
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    # 10:00 UTC every Monday
+  - cron: 0 10 * * 1
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    name: Real-model correctness eval
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:9.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_USER: ci
+          MYSQL_PASSWORD: topsecret
+          MYSQL_DATABASE: openemr_test
+        options: >-
+          --health-cmd="mysql -uroot -proot -e 'SELECT 1'"
+          --health-interval=3s
+          --health-timeout=2s
+          --health-retries=20
+        ports:
+        - 3306:3306
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    # No OPENEMR__COPILOT_API_KEY repo secret means this eval cannot call
+    # the real API yet -- skip cleanly with a clear reason instead of
+    # failing every scheduled run on a missing-secret error.
+    - name: Check API key is configured
+      id: guard
+      run: |
+        if [ -z "${{ secrets.OPENEMR__COPILOT_API_KEY }}" ]; then
+          echo "::warning::OPENEMR__COPILOT_API_KEY repo secret is not set -- skipping the real-API eval."
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Setup PHP and Composer
+      if: steps.guard.outputs.configured == 'true'
+      uses: ./.github/actions/setup-php-composer
+      with:
+        php-version: '8.3'
+
+    - name: Run CLI installer
+      if: steps.guard.outputs.configured == 'true'
+      run: ./cli install --db-host=127.0.0.1 --db-port=3306 --db-root-user=root --db-root-password=root --db-user=ci --db-password=topsecret --db-name=openemr_test --oe-admin-username=admin --oe-admin-password=pass --no-interaction -vvv
+
+    - name: Apply Clinical Co-Pilot module schema
+      if: steps.guard.outputs.configured == 'true'
+      # `./cli install` has no concept of custom modules under
+      # interface/modules/custom_modules/ -- see apply-schema.php's own
+      # docblock (same step integration-tests.yml runs).
+      run: php tests/Tests/Fixtures/ClinicalCopilot/apply-schema.php
+
+    - name: Run correctness eval against the real Anthropic API
+      if: steps.guard.outputs.configured == 'true'
+      env:
+        OPENEMR__COPILOT_API_KEY: ${{ secrets.OPENEMR__COPILOT_API_KEY }}
+      run: php tests/eval/clinical-copilot-correctness-eval.php
