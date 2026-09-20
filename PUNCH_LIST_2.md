@@ -29,10 +29,11 @@ results), 10 (strict schemas, separate health/ready, runnable API
 collection), 12 (actual spend + projections at four scales, with
 architectural changes). These map directly onto Items 5, 2, 3, 4, and 1
 respectively — closing this document's five items was the mechanism for
-addressing all five failing gates, not a separate effort. Gates 7 (Item 5)
-and 12 (Item 1) had genuine, specific remaining sub-gaps beyond what Items 1
-and 5 originally scoped; both were reprioritized and closed as a direct
-result of the rubric feedback (see each item's own "reprioritized" note).
+addressing all five failing gates, not a separate effort. Gates 7 (Item 5),
+9 (Item 3), and 12 (Item 1) had genuine, specific remaining sub-gaps beyond
+what those items originally scoped; all three were reprioritized and closed
+as a direct result of the rubric feedback (see each item's own
+"reprioritized" note).
 
 ---
 
@@ -148,6 +149,14 @@ session closed two gaps:
 
 Verified: 72/72 copilot tests pass (Services + Isolated), zero new PHPStan
 errors, PSR-12/Rector/codespell clean.
+- **Reprioritized and closed (2026-09-19):** the 12-gate rubric's Gate 9
+  asked for boundaries/invariants/regression "with results" — this item's
+  test *design* was already strong, but there was no standalone results
+  artifact, only prose in commit messages and this document. `EVAL_RESULTS.md`
+  (new, repo root) is that artifact: a real run (111 tests, 539 assertions,
+  0 failures, git SHA `fc7326004c`), the full test list grouped by failure
+  mode, and the six real bugs this suite and the audit work behind it
+  actually caught, each tied to its own regression test.
 - **What's left (the 5%):** nothing blocking — this is now a genuinely
   strong eval suite by `AgentForge.md`'s own bar. Further cases (more
   boundary conditions, more adversarial shapes) would be additive polish,
@@ -239,7 +248,9 @@ domain-constraint families:
    only a Langfuse plan-tier limit remains, a billing decision, not
    engineering work.
 3. ~~**Item 3 (eval suite)**~~ — **done, ~95%**; the composed test case
-   landed.
+   landed, and (reprioritized after rubric Gate 9 named the missing
+   "with results" evidence) `EVAL_RESULTS.md` now gives the suite a
+   standalone, real results artifact.
 4. ~~**Item 4 (API contracts / health)**~~ — **done, ~98%**; readyz fails
    closed, tool schemas extracted (fixing two real bugs along the way), and
    an OpenAPI contract is committed.
