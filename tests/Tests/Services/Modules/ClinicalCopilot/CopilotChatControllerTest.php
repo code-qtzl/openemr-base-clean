@@ -29,7 +29,9 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/FakeAnthropicTranspor
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ScriptedAnthropicClientFactory.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtureManager.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/CapturingHttpTransporter.php';
+require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/MutableTestClock.php';
 
+use DateTimeImmutable;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
@@ -38,6 +40,7 @@ use OpenEMR\Modules\ClinicalCopilot\Controller\CopilotChatController;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\CapturingHttpTransporter;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
+use OpenEMR\Tests\Fixtures\ClinicalCopilot\MutableTestClock;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedAnthropicClientFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -83,6 +86,7 @@ final class CopilotChatControllerTest extends TestCase
         $this->restoreSessionValue('authProvider', $this->originalAuthProvider);
         $this->restoreSessionValue('csrf_private_key', $this->originalCsrfKey);
         $this->restoreSessionValue('session_database_uuid', $this->originalSessionUuid);
+        $this->session->remove('clinical_copilot_rate_limit');
         if ($this->testSessionUuid !== null) {
             QueryUtils::sqlStatementThrowException(
                 'DELETE FROM `clinical_copilot_conversation` WHERE `session_uuid` = ?',
@@ -113,6 +117,72 @@ final class CopilotChatControllerTest extends TestCase
 
         self::assertSame(400, $response->getStatusCode());
         self::assertSame(0, $this->copilotLogCountFor($pid));
+    }
+
+    /**
+     * Failure mode guarded against: AI_SPEND.md's cost-consciousness -- a
+     * session that has already hit the per-window request-rate limit must
+     * be rejected with 429 before any Anthropic call is made, proven the
+     * same way oversizedQuestionIsRejectedBeforeAnyCopilotWork proves it:
+     * no clinical_copilot_log row written, not just the status code.
+     * 'clinical_copilot_rate_limit' mirrors CopilotChatController's private
+     * RATE_LIMIT_SESSION_KEY constant -- pre-seeding it at the cap avoids
+     * actually driving RATE_LIMIT_MAX_REQUESTS real request cycles just to
+     * reach the boundary.
+     */
+    #[Test]
+    public function requestOverTheRateLimitIsRejectedBeforeAnyCopilotWork(): void
+    {
+        $pid = $this->installPrimaryAndAuthenticate();
+        $token = $this->csrfToken();
+
+        $this->session->set('clinical_copilot_rate_limit', ['windowStart' => time(), 'count' => 15]);
+
+        $request = Request::create('/ajax.php', 'POST', [
+            'csrf_token' => $token,
+            'question' => 'What conditions does this patient have?',
+        ]);
+
+        $response = $this->invokeBuildResponse(new CopilotChatController(), $request);
+
+        self::assertSame(429, $response->getStatusCode());
+        self::assertSame(0, $this->copilotLogCountFor($pid));
+    }
+
+    /**
+     * Failure mode guarded against: the rate limit is a sliding window, not
+     * a permanent lockout -- a clinician who legitimately asks many
+     * questions across a long clinic day must be able to continue once the
+     * window rolls over, not be stuck until the session ends.
+     */
+    #[Test]
+    public function rateLimitResetsAfterTheWindowElapses(): void
+    {
+        $pid = $this->installPrimaryAndAuthenticate();
+        $token = $this->csrfToken();
+
+        $fixed = new DateTimeImmutable('2026-01-01 09:00:00');
+        $clock = new MutableTestClock($fixed);
+        $this->session->set('clinical_copilot_rate_limit', ['windowStart' => $fixed->getTimestamp(), 'count' => 15]);
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->submitAnswer(['insufficient_information' => true, 'summary' => 'The chart has no data recorded.'])
+            ->finalText();
+        $controller = new CopilotChatController(clientFactory: $factory, clock: $clock);
+        $request = static fn (): Request => Request::create('/ajax.php', 'POST', [
+            'csrf_token' => $token,
+            'question' => 'Any updates from the last visit?',
+        ]);
+
+        $stillLimited = $this->invokeBuildResponse($controller, $request());
+        self::assertSame(429, $stillLimited->getStatusCode());
+        self::assertSame(0, $this->copilotLogCountFor($pid));
+
+        $clock->advanceBySeconds(301);
+
+        $afterWindow = $this->invokeBuildResponse($controller, $request());
+        self::assertSame(200, $afterWindow->getStatusCode());
+        self::assertSame(1, $this->copilotLogCountFor($pid, success: 1));
     }
 
     /**

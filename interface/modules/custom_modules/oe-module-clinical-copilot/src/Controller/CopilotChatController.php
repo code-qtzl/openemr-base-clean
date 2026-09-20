@@ -10,6 +10,9 @@
  *   - ACL is checked against the same permission the chart itself uses
  *     ('patients', 'demo'), so the co-pilot can never widen what the signed-in
  *     user may already read.
+ *   - A per-session request-rate limit is enforced before any Anthropic call
+ *     is made, so a stuck client-side retry loop or a single misbehaving
+ *     session cannot run up unbounded real API spend (AI_SPEND.md).
  *   - The patient id comes from the SESSION -- the chart the user actually has
  *     open -- and is parsed to an int here before being handed to the tool
  *     layer. No request parameter and no model output can redirect it at
@@ -37,6 +40,7 @@ use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\SqlQueryException;
+use OpenEMR\Common\Session\SessionUtil;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\AnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
@@ -49,21 +53,45 @@ use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
+use Psr\Clock\ClockInterface;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 final readonly class CopilotChatController
 {
     private const MAX_QUESTION_LENGTH = 2000;
+
+    /**
+     * Session key holding this session's rate-limit window state, an
+     * array{windowStart: int, count: int}.
+     */
+    private const RATE_LIMIT_SESSION_KEY = 'clinical_copilot_rate_limit';
+
+    /**
+     * Requests allowed per session per RATE_LIMIT_WINDOW_SECONDS. Sized
+     * generously above realistic use (USERS.md's Dr. Ruiz persona asks a
+     * handful of questions per patient visit) while still bounding worst-case
+     * real Anthropic spend from a stuck client-side retry loop or a
+     * misbehaving session to roughly this count times AI_SPEND.md's
+     * per-question rate, not an unbounded amount.
+     */
+    private const RATE_LIMIT_MAX_REQUESTS = 15;
+
+    private const RATE_LIMIT_WINDOW_SECONDS = 300;
+
+    private ClockInterface $clock;
 
     public function __construct(
         private CopilotInteractionLogger $interactionLogger = new CopilotInteractionLogger(),
         private LangfuseTracer $tracer = new LangfuseTracer(),
         private AnthropicClientFactory $clientFactory = new DefaultAnthropicClientFactory(),
         private ConversationStore $conversationStore = new SqlConversationStore(),
+        ?ClockInterface $clock = null,
     ) {
+        $this->clock = $clock ?? ServiceContainer::getClock();
     }
 
     public function handleRequest(): void
@@ -82,6 +110,10 @@ final readonly class CopilotChatController
 
         if (!AclMain::aclCheckCore('patients', 'demo')) {
             return $this->error(xl('You do not have permission to view this chart.'), 403, $correlationId);
+        }
+
+        if (!$this->withinRateLimit($session)) {
+            return $this->error(xl('Too many requests. Please wait a moment before asking again.'), 429, $correlationId);
         }
 
         $sessionPid = $session->get('pid');
@@ -196,6 +228,34 @@ final readonly class CopilotChatController
 
             return $this->error(xl('The co-pilot could not answer that right now.'), 500, $correlationId);
         }
+    }
+
+    /**
+     * Sliding-window request-rate limit, scoped to this browser session.
+     * Checked before any Anthropic call is made, so a rejected request costs
+     * nothing. Not a defense against a determined multi-session attacker --
+     * every request here already required a valid, ACL-checked login -- this
+     * bounds the ordinary failure mode of a stuck client-side retry loop or
+     * one session asking far outside realistic use.
+     */
+    private function withinRateLimit(SessionInterface $session): bool
+    {
+        $now = $this->clock->now()->getTimestamp();
+
+        /** @var mixed $state */
+        $state = $session->get(self::RATE_LIMIT_SESSION_KEY);
+        $windowStart = is_array($state) && is_int($state['windowStart'] ?? null) ? $state['windowStart'] : $now;
+        $count = is_array($state) && is_int($state['count'] ?? null) ? $state['count'] : 0;
+
+        if ($now - $windowStart >= self::RATE_LIMIT_WINDOW_SECONDS) {
+            $windowStart = $now;
+            $count = 0;
+        }
+
+        ++$count;
+        SessionUtil::setSession(self::RATE_LIMIT_SESSION_KEY, ['windowStart' => $windowStart, 'count' => $count]);
+
+        return $count <= self::RATE_LIMIT_MAX_REQUESTS;
     }
 
     private static function elapsedMs(float $startedAt): int
