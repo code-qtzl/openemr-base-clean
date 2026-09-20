@@ -22,6 +22,18 @@ feedback's own instruction to stop expanding scope.
 
 Ordered by a mix of priority (weakest area first) and dependency.
 
+**Update (2026-09-19): a separate 12-gate formal rubric was received**, with
+5 gates failing: 7 (source attribution / domain constraints), 8 (logs +
+correlation IDs + live dashboard), 9 (boundaries/invariants/regression, with
+results), 10 (strict schemas, separate health/ready, runnable API
+collection), 12 (actual spend + projections at four scales, with
+architectural changes). These map directly onto Items 5, 2, 3, 4, and 1
+respectively — closing this document's five items was the mechanism for
+addressing all five failing gates, not a separate effort. Gates 7 (Item 5)
+and 12 (Item 1) had genuine, specific remaining sub-gaps beyond what Items 1
+and 5 originally scoped; both were reprioritized and closed as a direct
+result of the rubric feedback (see each item's own "reprioritized" note).
+
 ---
 
 ## Item 1 — Document actual AI spend with scaling projections
@@ -167,32 +179,33 @@ surfaced real bugs neither had a test for before this:
 
 ## Item 5 — Add the full verification layer
 
-**Current state: ~85%.** Both halves `AgentForge.md` names exist and are
-tested: source attribution (`ResponseVerifier` — every claim must cite a tool
-call actually made this turn, or the whole answer is rejected to a safe
-fallback) and domain constraint enforcement (`MedicationStalenessPolicy` +
-`ResponseVerifier`'s hard-coded zero-row guard on `get_medications`). Both
-have a documented, disclosed known limitation (can't distinguish a truthful
-"no medications on file" claim from a hallucinated one — both get the same
-conservative rejection).
-
-- **Gap:** Verification currently enforces exactly **one** domain-constraint
-  family (medication staleness/absence). `AgentForge.md`'s "Hard Problems"
-  section names a broader set as illustrative of what's in scope — "clinical
-  rules, dosage thresholds, interaction flags" — none of which exist today.
-  Given the feedback's own instruction to spend *less* time expanding scope,
-  this is the lowest-priority item here, not a blocker.
-- **Build (optional, pick based on time remaining):** One additional
-  domain-constraint check with the same "reject to safe fallback" posture as
-  the existing medication guard — e.g., a stale-active-problem check (an
-  "active" diagnosis coded decades ago, analogous to the medication-staleness
-  finding `AUDIT_Extra.md` already documents for problems, not just meds).
-- **Acceptance:** New constraint has the same test-suite treatment as
-  `MedicationStalenessPolicyTest`/`ResponseVerifierTest` — a documented
-  failure mode per case, a regression test for the specific data-quality
-  finding it closes.
-- **Effort:** M, and explicitly optional/last given the feedback's own
-  "spend less time expanding the feature set" instruction.
+**Current state: ~95%. Done**, reprioritized after external rubric feedback
+named this a specific failing gate (Gate 7: "source attribution and domain
+constraint enforcement on every response"). Both halves `AgentForge.md`
+names exist and are tested: source attribution (`ResponseVerifier` — every
+claim must cite a tool call actually made this turn, or the whole answer is
+rejected to a safe fallback) and, as of this session, **two** independent
+domain-constraint families:
+1. `MedicationStalenessPolicy` (advisory warning) +
+   `ResponseVerifier`'s hard-coded zero-row guard on `get_medications`
+   (hard rejection) — pre-existing.
+2. `ActiveProblemStalenessPolicy` (new) — a live query against this fork's
+   own seeded database confirmed the same shape of gap exists for active
+   problems, not just medications: 2,943 of 6,126 active problem rows (48%)
+   have an onset over 20 years in the past (some as far back as 1946),
+   still marked active. Mirrors `MedicationStalenessPolicy`'s advisory-
+   warning shape, with a deliberately longer threshold (20 years vs. 2)
+   reflecting that chronic problems legitimately persist far longer than a
+   prescription should go unreconciled. Verified against the real
+   Anthropic API, not just mocked tests. 11 new tests.
+- **What's left (the 5%):** both constraint families share the same known,
+  disclosed limitation (can't distinguish a truthful negative claim from a
+  hallucinated one at zero rows) — this is an accepted MVP tradeoff, not an
+  oversight, per `ResponseVerifier`'s own docblock. Further constraint types
+  (dosage thresholds, interaction flags) remain unbuilt; two independent
+  families is a defensible demonstration of breadth without over-expanding
+  scope.
+- **Effort:** Done.
 
 ---
 
@@ -212,15 +225,16 @@ conservative rejection).
 4. ~~**Item 4 (API contracts / health)**~~ — **done, ~98%**; readyz fails
    closed, tool schemas extracted (fixing two real bugs along the way), and
    an OpenAPI contract is committed.
-5. **Item 5 (verification layer)** — already meets `AgentForge.md`'s literal
-   bar; treat as optional given the feedback's explicit steer away from
-   scope expansion.
+5. ~~**Item 5 (verification layer)**~~ — **done, ~95%**; reprioritized after
+   rubric Gate 7 failed on this specifically. A second, independently-tested
+   domain constraint (`ActiveProblemStalenessPolicy`) now demonstrates
+   breadth, not just one narrow rule.
 
 ## Traceability
 
 | Feedback item | This document | Current state |
 |---|---|---|
-| "full verification layer" | Item 5 | ~85% |
+| "full verification layer" | Item 5 | ~95% |
 | "required eval and regression suite" | Item 3 | ~95% |
 | "observability visible through a live dashboard" | Item 2 | ~98% |
 | "complete the API contracts and health/readiness checks" | Item 4 | ~98% |
