@@ -235,12 +235,46 @@ CREATE TABLE IF NOT EXISTS `clinical_copilot_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Idempotent upgrade for a demo volume seeded before these columns existed.
--- MariaDB (this image's engine) supports IF NOT EXISTS on ADD COLUMN; a
--- fresh CREATE TABLE above already has both, so this is a no-op there.
-ALTER TABLE `clinical_copilot_log`
-  ADD COLUMN IF NOT EXISTS `correlation_id` VARCHAR(36) NULL AFTER `id`,
-  ADD COLUMN IF NOT EXISTS `latency_ms` INT UNSIGNED NULL AFTER `success`,
-  ADD COLUMN IF NOT EXISTS `verification_passed` TINYINT(1) NULL AFTER `latency_ms`;
+-- Uses INFORMATION_SCHEMA + dynamic SQL rather than "ADD COLUMN IF NOT
+-- EXISTS": the `mariadb` CLI here is just the client binary -- the actual
+-- Railway database is MySQL, and that DDL sugar does not parse against it
+-- (confirmed via a production crash-loop). A fresh CREATE TABLE above
+-- already has all three columns, so each block below is a no-op there.
+SET @col_exists := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clinical_copilot_log'
+     AND COLUMN_NAME = 'correlation_id'
+);
+SET @ddl := IF(@col_exists = 0,
+  'ALTER TABLE `clinical_copilot_log` ADD COLUMN `correlation_id` VARCHAR(36) NULL AFTER `id`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clinical_copilot_log'
+     AND COLUMN_NAME = 'latency_ms'
+);
+SET @ddl := IF(@col_exists = 0,
+  'ALTER TABLE `clinical_copilot_log` ADD COLUMN `latency_ms` INT UNSIGNED NULL AFTER `success`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @col_exists := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clinical_copilot_log'
+     AND COLUMN_NAME = 'verification_passed'
+);
+SET @ddl := IF(@col_exists = 0,
+  'ALTER TABLE `clinical_copilot_log` ADD COLUMN `verification_passed` TINYINT(1) NULL AFTER `latency_ms`',
+  'SELECT 1');
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 INSERT INTO `modules`
     (`mod_name`, `mod_directory`, `mod_parent`, `mod_type`, `mod_active`,
