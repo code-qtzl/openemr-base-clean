@@ -108,6 +108,73 @@ that would materially cut this, per Anthropic's own published pricing:
   agent's "physician waiting in the room" latency requirement (`AgentForge.md`
   Hard Problems: Speed vs. Completeness), so not recommended here.
 
+## Architectural changes needed at each scale
+
+The dollar figures above assume today's architecture keeps working
+unchanged as physician count grows. It doesn't. `railway.json` sets
+`"numReplicas": 1` with no autoscaling — a single container serves every
+concurrent chat request, and `AUDIT_Extra.md`'s Finding P5 names the
+consequence: each co-pilot request pins an Apache/PHP-FPM worker for the
+full duration of the blocking LLM call chain, not milliseconds.
+`PERFORMANCE_BASELINE.md` measured this directly, not theoretically — k6
+against this exact single-instance architecture, **mocked (instant) LLM
+calls**: 10 VU is clean (0.0% error rate), 50 VU degrades sharply (**28.0%
+error rate**, almost all `session_setup_errors` from Apache-worker/MySQL
+connection-pool contention, p95 climbing from 304ms to 1.04s on the chat
+call alone, 1.70s to 8.24s full-HTTP-flow). That 28% is a **floor**, not a
+ceiling: the same report's real-API row shows real `claude-opus-5` calls
+take 13.2–18.9s (p50–p99), roughly 40–60x the mocked stub — so a real
+50-concurrent-user burst holds each worker far longer than the mocked test
+did, and would degrade worse, not better.
+
+Mapping that evidence onto this document's four scale points:
+
+- **1 physician (Dr. Ruiz).** Worst-case concurrency is ~1 request at a
+  time — nowhere near the 10-VU mark this architecture handles cleanly. No
+  architectural change needed; today's single Railway instance is
+  correctly sized for this scale.
+- **5 physicians (small practice).** Peak concurrency (all 5 asking a
+  question in the same few-minute window) is still comfortably under the
+  measured-clean 10-VU threshold. No change required yet, but this is the
+  first scale where the risk becomes plausible enough to watch rather than
+  ignore: each real chat request now holds a worker for 13-19s, and it's
+  the same worker pool ordinary EHR page loads use. Recommended action is
+  monitoring (`ALERTS.md`'s latency/error thresholds), not a code change.
+- **50 physicians (clinic/small hospital).** This is the exact regime
+  `PERFORMANCE_BASELINE.md` measured — 50 concurrent users against this
+  same no-autoscaling architecture produced a 28% error rate even with an
+  *instant* mocked LLM call. Real chat calls holding workers for 13-19s
+  each would saturate the pool faster and worse than that 28% figure.
+  **Architectural change required at this scale, not optional**: implement
+  Finding P5's remediation — move the co-pilot's blocking LLM call chain
+  off the main request-handling Apache/PHP-FPM workers (an async
+  queue/worker plus the SSE/streaming response this repo doesn't have yet),
+  and/or add horizontal autoscaling (`railway.json`'s `numReplicas` beyond
+  1, load-balanced). Without this, 50 physicians degrade both their own
+  co-pilot latency and everyone's ordinary EHR page loads on the same
+  starved worker pool.
+- **500 physicians (hospital system).** Same P5 bottleneck, an order of
+  magnitude worse — no amount of worker-pool tuning on a single container
+  survives this volume. Requires the full remediation to already be in
+  place: horizontal autoscaling as a standing requirement (not a burst
+  response), the async-queue/SSE architecture from the 50-physician tier
+  now mandatory, and MySQL connection-pool sizing scaled alongside the app
+  tier (P5's error signature was mostly connection/session-setup
+  contention, not chat-endpoint failures once a session was established).
+  At this volume the cost side matters too: **prompt caching** (90% off
+  cached input tokens — see "Scaling projections," above) stops being a
+  nice-to-have and becomes the difference between ~$17.5k/mo and a
+  meaningfully lower bill, since `ChartContextTools`' tool results and
+  system prompt repeat turn-over-turn at real scale. Batch processing
+  remains inapplicable at every scale — this agent is still answering a
+  physician waiting in the room, not a queued job.
+
+None of this is new work invented for this document — it's `AUDIT_Extra.md`
+Finding P5 and `PERFORMANCE_BASELINE.md`'s own load-test numbers, connected
+to the dollar figures above so a reader doesn't have to cross-reference
+three documents to see where the architecture, not just the bill, has to
+change.
+
 ## What this is not
 
 - **Not a confirmed billed dollar amount.** This is measured token counts ×

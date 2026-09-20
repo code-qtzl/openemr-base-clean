@@ -38,7 +38,7 @@ result of the rubric feedback (see each item's own "reprioritized" note).
 
 ## Item 1 — Document actual AI spend with scaling projections
 
-**Current state: 90%. Done except an actual billed-dollar confirmation.**
+**Current state: 95%. Done except an actual billed-dollar confirmation.**
 `AI_SPEND.md` (new, repo root) now states a real measured cost per question
 ($0.0759 average, 3 real requests against real chart data, tied to git SHA
 `3f82c71789`), sourced from `AskResult::inputTokens`/`outputTokens` (the
@@ -50,7 +50,22 @@ directly, not a third-party estimate). A scaling table projects this to
 The measurement tool (`tests/loadtest/real-api-cost-smoke.php`) is committed,
 not a throwaway script, so this can be re-run after any pricing or model
 change.
-- **What's left (the 10%):** the multi-turn (Tier 4.1) per-conversation cost
+- **Reprioritized and closed (2026-09-19):** the 12-gate rubric's Gate 12
+  named a specific gap the original 90% figure didn't cover — "with
+  architectural changes" at each scale, not just a bigger dollar figure.
+  `AI_SPEND.md` now has a dedicated "Architectural changes needed at each
+  scale" section tying each of the four scale points to real evidence
+  already in this repo: `AUDIT_Extra.md` Finding P5 (`railway.json`'s
+  `numReplicas: 1`, no autoscaling, one Apache/PHP-FPM worker pool shared by
+  every concurrent request) and `PERFORMANCE_BASELINE.md`'s own k6 numbers
+  (10 VU clean at 0% errors, 50 VU degrading to 28% errors under a *mocked*
+  instant LLM call — real calls hold a worker 13-19s, so the real number is
+  worse). 1 and 5 physicians need no architectural change (concurrency stays
+  under the measured-clean threshold); 50 and 500 do — P5's async-queue/SSE
+  and horizontal-autoscaling remediation stops being optional at 50
+  physicians and becomes load-bearing at 500. No new claims invented — every
+  number cited already existed in this repo's own audit and load-test docs.
+- **What's left (the 5%):** the multi-turn (Tier 4.1) per-conversation cost
   is an *estimate*, not directly measured — `AI_SPEND.md` says so explicitly
   rather than presenting a guess as measured. And this is a published-rate
   estimate, not a confirmed Anthropic Console billed dollar amount for this
@@ -211,10 +226,13 @@ domain-constraint families:
 
 ## Priority order
 
-1. ~~**Item 1 (AI spend)**~~ — **done to 90%**; `AI_SPEND.md` ships a real
-   measured cost and scaling table. Only remaining: a measured (not
-   estimated) multi-turn figure, and an actual-billed confirmation if that
-   precision is wanted.
+1. ~~**Item 1 (AI spend)**~~ — **done to 95%**; `AI_SPEND.md` ships a real
+   measured cost, a scaling table, and (reprioritized after rubric Gate 12
+   failed on this specifically) a dedicated section tying architectural
+   changes to each of the four scale points, grounded in `AUDIT_Extra.md`
+   Finding P5 and `PERFORMANCE_BASELINE.md`'s own k6 numbers. Only
+   remaining: a measured (not estimated) multi-turn figure, and an
+   actual-billed confirmation if that precision is wanted.
 2. ~~**Item 2 (live dashboard)**~~ — **done, ~98%**; screenshots committed,
    the environment-tagging bug fixed, 2 of 3 alerts live-wired to Slack, and
    the third's original blocker (a real tracing gap) found *and closed* —
@@ -238,4 +256,4 @@ domain-constraint families:
 | "required eval and regression suite" | Item 3 | ~95% |
 | "observability visible through a live dashboard" | Item 2 | ~98% |
 | "complete the API contracts and health/readiness checks" | Item 4 | ~98% |
-| "document actual AI spend with... scaling projections" | Item 1 | ~90% |
+| "document actual AI spend with... scaling projections" | Item 1 | ~95% |
