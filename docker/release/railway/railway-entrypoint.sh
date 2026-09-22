@@ -276,6 +276,24 @@ PREPARE stmt FROM @ddl;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
+-- Multi-turn conversation state (table.sql's clinical_copilot_conversation).
+-- Same reason as clinical_copilot_log above: table.sql's #IfNotTable directive
+-- is never interpreted on this boot path, so without a hand-rolled equivalent
+-- here this table has never existed on Railway -- every read/write has been
+-- silently failing (caught by SqlConversationStore, degrading to memory-less
+-- turns) since the conversation feature shipped.
+CREATE TABLE IF NOT EXISTS `clinical_copilot_conversation` (
+  `id`             BIGINT(20)   NOT NULL AUTO_INCREMENT,
+  `session_uuid`   VARCHAR(36)  NOT NULL,
+  `pid`            BIGINT(20)   NOT NULL,
+  `turns_json`     MEDIUMTEXT   NOT NULL,
+  `created_at`     DATETIME     NOT NULL,
+  `last_updated`   DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `session_pid` (`session_uuid`, `pid`),
+  KEY `last_updated` (`last_updated`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 INSERT INTO `modules`
     (`mod_name`, `mod_directory`, `mod_parent`, `mod_type`, `mod_active`,
      `mod_ui_name`, `mod_relative_link`, `mod_ui_order`, `mod_ui_active`,
