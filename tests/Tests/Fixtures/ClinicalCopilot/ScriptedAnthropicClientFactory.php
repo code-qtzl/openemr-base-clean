@@ -125,6 +125,15 @@ final class ScriptedAnthropicClientFactory implements AnthropicClientFactory
     }
 
     /**
+     * No-op: FakeAnthropicTransporter resolves every call synchronously and
+     * instantly, so there is no in-flight wait for a heartbeat to tick
+     * during.
+     */
+    public function setHeartbeat(?callable $onTick): void
+    {
+    }
+
+    /**
      * @param list<array<string, mixed>> $content
      * @return array<string, mixed>
      */

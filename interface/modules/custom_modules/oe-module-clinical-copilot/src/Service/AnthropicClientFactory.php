@@ -38,4 +38,24 @@ interface AnthropicClientFactory
      * create() has been called, and after every call that made none.
      */
     public function retryCount(): int;
+
+    /**
+     * Register a callback to be invoked periodically while a create()'d
+     * client's HTTP call to Anthropic is in flight (Appendix_CheckList.md
+     * Phase 3 Item 15's connection-timeout gap: a fully-synchronous,
+     * non-streaming chat request sends zero bytes to the browser until the
+     * whole multi-tool-call conversation finishes, which a reverse proxy
+     * with no view into that work can and does mistake for a dead
+     * connection and close early -- confirmed against the real Railway
+     * deployment, where the backend completed a request successfully in
+     * ~17s but the browser had already errored out).
+     *
+     * The production implementation wires this into the transport's
+     * progress reporting so it fires roughly once per second even while no
+     * bytes have moved yet, letting the caller (CopilotChatController) push
+     * keep-alive bytes to the client during the wait. Pass null to clear a
+     * previously registered callback. A no-op in test doubles, whose fake
+     * transporters resolve instantly and have nothing to report progress on.
+     */
+    public function setHeartbeat(?callable $onTick): void;
 }

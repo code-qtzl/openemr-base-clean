@@ -25,6 +25,13 @@
  * trace of one request can be reconstructed from logs alone by grepping for
  * that one id.
  *
+ * Once the fast validation above passes, beginHeartbeat() commits the HTTP
+ * response and starts writing keep-alive bytes for the duration of the
+ * Anthropic call -- see its docblock for why: a fully-synchronous,
+ * non-streaming request that writes nothing until it's entirely done reads
+ * as a dead connection to any reverse proxy in front of it, and one dropped
+ * a real Railway request that had actually succeeded server-side.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -141,6 +148,8 @@ final readonly class CopilotChatController
         $sessionUuid = $this->sessionString($session->get('session_database_uuid'));
         $startedAt = microtime(true);
 
+        $this->beginHeartbeat();
+
         try {
             $tools = new ChartContextTools(
                 $patientId,
@@ -256,6 +265,53 @@ final readonly class CopilotChatController
         SessionUtil::setSession(self::RATE_LIMIT_SESSION_KEY, ['windowStart' => $windowStart, 'count' => $count]);
 
         return $count <= self::RATE_LIMIT_MAX_REQUESTS;
+    }
+
+    /**
+     * Commits this response to HTTP 200 with a keep-alive heartbeat running
+     * for the duration of the (potentially long, fully-synchronous,
+     * non-streaming) Anthropic call that follows, so a reverse proxy sees
+     * steady byte traffic instead of an apparently-dead connection.
+     * Appendix_CheckList.md Phase 3 Item 15: confirmed against the live
+     * Railway deployment that a request can complete successfully
+     * server-side in ~17s while the browser has already errored out well
+     * before that, because nothing is written to the response until the
+     * whole conversation finishes.
+     *
+     * Trade-off, made deliberately rather than by accident: once this runs,
+     * the real HTTP status code this request ultimately sends is locked at
+     * 200, because the status line must be sent before we can start writing
+     * keep-alive bytes, before the Anthropic call's outcome is known. A
+     * later failure (AnthropicException/SqlQueryException/etc. below) still
+     * produces a JsonResponse with the "correct" status internally (500,
+     * etc.) -- Symfony's Response::sendHeaders() silently no-ops when
+     * headers were already sent, so that status is never actually
+     * transmitted -- but the frontend (copilot.js) already ignores the HTTP
+     * status entirely and only branches on the JSON body's `error` key, so
+     * this is invisible to the user. Skipped entirely under the CLI SAPI
+     * (i.e. the test suite): header()/echo/flush would pollute PHPUnit's
+     * output and there is nothing real to keep alive against a synchronous
+     * test double, so buildResponse()'s return value -- and its status
+     * codes -- stay exactly as tests assert them.
+     */
+    private function beginHeartbeat(): void
+    {
+        if (PHP_SAPI === 'cli') {
+            return;
+        }
+
+        http_response_code(200);
+        header('Content-Type: application/json');
+        header('X-Accel-Buffering: no');
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+        flush();
+
+        $this->clientFactory->setHeartbeat(static function (): void {
+            echo ' ';
+            flush();
+        });
     }
 
     private static function elapsedMs(float $startedAt): int

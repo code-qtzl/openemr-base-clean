@@ -42,12 +42,31 @@ final class DefaultAnthropicClientFactory implements AnthropicClientFactory
 
     private ?RetryCountingTransporter $transporter = null;
 
+    /** @var callable|null */
+    private $heartbeat = null;
+
     public function create(string $apiKey, string $correlationId): Client
     {
-        $this->transporter = new RetryCountingTransporter(new GuzzleClient([
+        $guzzleOptions = [
             'connect_timeout' => self::CONNECT_TIMEOUT_SECONDS,
             'timeout' => self::REQUEST_TIMEOUT_SECONDS,
-        ]));
+        ];
+
+        // Guzzle's curl handler enables CURLOPT_NOPROGRESS => false whenever a
+        // 'progress' option is present, which makes libcurl invoke it roughly
+        // once per second for the entire transfer -- including while waiting
+        // for Anthropic's first response byte, not just while bytes are
+        // moving. That periodic invocation, not any actual progress figure,
+        // is what setHeartbeat()'s caller relies on; the four arguments are
+        // intentionally ignored.
+        if ($this->heartbeat !== null) {
+            $onTick = $this->heartbeat;
+            $guzzleOptions['progress'] = static function (...$_) use ($onTick): void {
+                $onTick();
+            };
+        }
+
+        $this->transporter = new RetryCountingTransporter(new GuzzleClient($guzzleOptions));
 
         return new Client(
             apiKey: $apiKey,
@@ -61,5 +80,10 @@ final class DefaultAnthropicClientFactory implements AnthropicClientFactory
     public function retryCount(): int
     {
         return $this->transporter?->retryCount() ?? 0;
+    }
+
+    public function setHeartbeat(?callable $onTick): void
+    {
+        $this->heartbeat = $onTick;
     }
 }
