@@ -75,3 +75,28 @@ CREATE TABLE `clinical_copilot_conversation` (
   KEY `last_updated` (`last_updated`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 #EndIf
+
+-- Document ingestion (AgentForge2 Core Requirement #1: attach_and_extract).
+-- One row per document extraction that passed SchemaValidator's
+-- schema_valid check -- DocumentIngestionPipeline never persists a
+-- schema-invalid extraction, so every row here already satisfies the
+-- lab_pdf/intake_form field contract. `document_id` links back to the
+-- `documents` row DocumentAttachmentService creates via
+-- documents.foreign_reference_id/foreign_reference_table (nullable: it is
+-- set in a second write after this row exists, per DocumentIngestionPipeline's
+-- documented two-phase insert).
+#IfNotTable clinical_copilot_extracted_document
+CREATE TABLE `clinical_copilot_extracted_document` (
+  `id`             BIGINT(20)   NOT NULL AUTO_INCREMENT,
+  `pid`            BIGINT(20)   NOT NULL COMMENT 'patient this extraction belongs to',
+  `document_id`    BIGINT(20)       NULL COMMENT 'documents.id of the stored source file; set after DocumentAttachmentService::store()',
+  `doc_type`       VARCHAR(32)  NOT NULL COMMENT 'lab_pdf or intake_form, per SchemaDocType',
+  `fields_json`    MEDIUMTEXT   NOT NULL COMMENT '{"doc_type": ..., "fields": {...}}, the validated ExtractedDocument envelope',
+  `created_at`     DATETIME     NOT NULL,
+  `last_updated`   DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `pid` (`pid`),
+  KEY `doc_type` (`doc_type`),
+  KEY `document_id` (`document_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+#EndIf

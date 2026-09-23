@@ -53,10 +53,7 @@ final class SchemaValidator
 
     public static function validate(ExtractedDocument $document): SchemaValidationResult
     {
-        $requiredFields = match ($document->docType) {
-            SchemaDocType::LabPdf => self::LAB_FIELDS,
-            SchemaDocType::IntakeForm => self::INTAKE_FIELDS,
-        };
+        $requiredFields = self::requiredFields($document->docType);
 
         $findings = [];
         foreach ($requiredFields as $field => $kind) {
@@ -67,6 +64,31 @@ final class SchemaValidator
         }
 
         return new SchemaValidationResult($findings === [], $findings);
+    }
+
+    /**
+     * The required field names for a document type, in the same order
+     * `validate()` checks them -- the single source of truth
+     * `ExtractionPromptBuilder` reads from rather than hand-duplicating
+     * this list, so the extraction prompt can never silently drift from
+     * what this validator enforces.
+     *
+     * @return list<string>
+     */
+    public static function requiredFieldNames(SchemaDocType $docType): array
+    {
+        return array_keys(self::requiredFields($docType));
+    }
+
+    /**
+     * @return array<string, SchemaFieldKind>
+     */
+    private static function requiredFields(SchemaDocType $docType): array
+    {
+        return match ($docType) {
+            SchemaDocType::LabPdf => self::LAB_FIELDS,
+            SchemaDocType::IntakeForm => self::INTAKE_FIELDS,
+        };
     }
 
     /**

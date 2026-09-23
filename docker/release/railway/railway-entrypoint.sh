@@ -294,6 +294,26 @@ CREATE TABLE IF NOT EXISTS `clinical_copilot_conversation` (
   KEY `last_updated` (`last_updated`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- Document ingestion (table.sql's clinical_copilot_extracted_document).
+-- Same reason as the two tables above: table.sql's #IfNotTable directive is
+-- never interpreted on this boot path, so without this hand-rolled
+-- equivalent, DocumentIngestionPipeline would silently fail every save() on
+-- Railway the same way clinical_copilot_conversation did before this file
+-- was fixed for it.
+CREATE TABLE IF NOT EXISTS `clinical_copilot_extracted_document` (
+  `id`             BIGINT(20)   NOT NULL AUTO_INCREMENT,
+  `pid`            BIGINT(20)   NOT NULL,
+  `document_id`    BIGINT(20)       NULL,
+  `doc_type`       VARCHAR(32)  NOT NULL,
+  `fields_json`    MEDIUMTEXT   NOT NULL,
+  `created_at`     DATETIME     NOT NULL,
+  `last_updated`   DATETIME     NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `pid` (`pid`),
+  KEY `doc_type` (`doc_type`),
+  KEY `document_id` (`document_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 INSERT INTO `modules`
     (`mod_name`, `mod_directory`, `mod_parent`, `mod_type`, `mod_active`,
      `mod_ui_name`, `mod_relative_link`, `mod_ui_order`, `mod_ui_active`,
