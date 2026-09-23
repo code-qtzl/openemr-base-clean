@@ -70,3 +70,6 @@ require_once $moduleSrc . '/Service/Extraction/SqlExtractedDocumentStore.php';
 require_once $moduleSrc . '/Service/Extraction/DocumentAttachmentService.php';
 require_once $moduleSrc . '/Service/Extraction/DocumentIngestionResult.php';
 require_once $moduleSrc . '/Service/Extraction/DocumentIngestionPipeline.php';
+require_once $moduleSrc . '/Service/Supervisor/ChartQaWorker.php';
+require_once $moduleSrc . '/Service/Supervisor/IntakeExtractorWorker.php';
+require_once $moduleSrc . '/Service/Supervisor/Supervisor.php';

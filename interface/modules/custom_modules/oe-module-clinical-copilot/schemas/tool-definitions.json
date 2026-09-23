@@ -47,6 +47,24 @@
             }
         },
         {
+            "name": "consult_chart_worker",
+            "description": "Consult the chart-data specialist: returns four structured data sources for this patient in one bundled response, keyed by name -- get_a1c_series, get_active_problems, get_medications, get_recent_encounters. Use for questions about diagnoses, treatment, glycaemic control, or visit history. When citing a claim via submit_answer, cite the specific data-source key inside the bundle (e.g. get_medications), not consult_chart_worker itself.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "consult_document_worker",
+            "description": "Consult the document-data specialist: returns data previously extracted from documents (lab PDFs and intake forms) the physician has uploaded and attached to this patient's chart, keyed as get_extracted_documents. Use for questions about an uploaded lab report, intake form, or any other attached document. When citing a claim via submit_answer, cite get_extracted_documents, not consult_document_worker itself.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
             "name": "submit_answer",
             "description": "Give your final answer to the clinician. Every clinical claim must cite exactly one tool call made this turn as its source_tool. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
             "input_schema": {
