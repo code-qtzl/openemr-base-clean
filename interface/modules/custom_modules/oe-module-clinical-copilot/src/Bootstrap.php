@@ -32,13 +32,19 @@ final class Bootstrap
     public function subscribeToEvents(): void
     {
         $this->eventDispatcher->addListener(
-            RenderEvent::EVENT_SECTION_LIST_RENDER_BEFORE,
+            RenderEvent::EVENT_RENDER_POST_PAGELOAD,
             $this->renderChartPanel(...)
         );
     }
 
     /**
-     * Render the co-pilot panel above the patient summary cards.
+     * Render the co-pilot panel as a page-level sidebar, not a card stacked
+     * inside the dashboard's column grid. EVENT_RENDER_POST_PAGELOAD fires
+     * right before </html> (demographics.php), so this markup sits outside
+     * the row/column flow entirely -- a fixed-position sidebar, not "one
+     * more widget in a row." Browsers relocate stray body content found
+     * after </body> back into <body> during HTML5 parsing, so this renders
+     * normally despite the dispatch point being technically post-</body>.
      *
      * The panel itself holds no PHI -- it is an empty shell that talks to
      * public/ajax.php. Keeping the LLM round-trip off the page render is what

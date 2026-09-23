@@ -38,6 +38,7 @@ use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Controller\CopilotChatController;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
+use OpenEMR\Modules\ClinicalCopilot\Service\SessionRateLimiter;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\CapturingHttpTransporter;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\MutableTestClock;
@@ -168,7 +169,7 @@ final class CopilotChatControllerTest extends TestCase
         $factory = (new ScriptedAnthropicClientFactory())
             ->submitAnswer(['insufficient_information' => true, 'summary' => 'The chart has no data recorded.'])
             ->finalText();
-        $controller = new CopilotChatController(clientFactory: $factory, clock: $clock);
+        $controller = new CopilotChatController(clientFactory: $factory, rateLimiter: new SessionRateLimiter($clock));
         $request = static fn (): Request => Request::create('/ajax.php', 'POST', [
             'csrf_token' => $token,
             'question' => 'Any updates from the last visit?',

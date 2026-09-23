@@ -20,6 +20,7 @@ $moduleSrc = __DIR__ . '/../../../../interface/modules/custom_modules/oe-module-
 
 require_once $moduleSrc . '/Service/AnthropicClientFactory.php';
 require_once $moduleSrc . '/Service/DefaultAnthropicClientFactory.php';
+require_once $moduleSrc . '/Service/SessionRateLimiter.php';
 require_once $moduleSrc . '/Service/AskResult.php';
 require_once $moduleSrc . '/Service/MedicationStalenessPolicy.php';
 require_once $moduleSrc . '/Service/ActiveProblemStalenessPolicy.php';
@@ -50,6 +51,8 @@ require_once $moduleSrc . '/Service/ChartContextTools.php';
 require_once $moduleSrc . '/Service/CopilotInteractionLogger.php';
 require_once $moduleSrc . '/Service/CopilotService.php';
 require_once $moduleSrc . '/Controller/CopilotChatController.php';
+require_once $moduleSrc . '/Controller/CopilotDocumentUploadController.php';
+require_once $moduleSrc . '/Controller/CopilotPanelController.php';
 require_once $moduleSrc . '/Service/Eval/Schema/SchemaDocType.php';
 require_once $moduleSrc . '/Service/Eval/Schema/SchemaFieldKind.php';
 require_once $moduleSrc . '/Service/Eval/Schema/ExtractedDocument.php';

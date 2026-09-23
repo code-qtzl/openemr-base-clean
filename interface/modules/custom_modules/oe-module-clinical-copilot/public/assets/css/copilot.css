@@ -1,12 +1,111 @@
-/* Clinical Co-Pilot chart panel. */
+/*
+ * Clinical Co-Pilot sidebar.
+ *
+ * Fixed-position overlay on the right edge of the page, open by default.
+ * Mirrors interface/themes/oe-common/oe-sidebar.scss's slide-panel
+ * conventions (position: fixed, transition, box-shadow, z-index: 1000) but
+ * as its own right-aligned class -- .nav-sidebar is a left-side primary-nav
+ * drawer with inverted open/closed polarity and is otherwise unused, so
+ * this does not reuse its classes directly.
+ */
+.copilot-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 24rem;
+    max-width: 92vw;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    box-shadow: -3px 0 10px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    transition: transform 0.35s ease;
+    transform: translateX(0);
+    padding: 0.75rem 0.9rem;
+}
+
+.copilot-sidebar-closed {
+    transform: translateX(100%);
+}
+
+.copilot-sidebar-unconfigured {
+    width: 20rem;
+}
+
+.copilot-reopen-tab {
+    position: fixed;
+    right: 0;
+    bottom: 1.5rem;
+    z-index: 999;
+    background-color: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 0.5rem 0 0 0.5rem;
+    padding: 0.6rem 0.9rem;
+    box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+}
+
+.copilot-reopen-tab:hover {
+    background-color: #0069d9;
+}
+
+.copilot-sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.copilot-sidebar-header .fa-robot {
+    color: #007bff;
+    margin-right: 0.25rem;
+}
+
+.copilot-icon-btn {
+    background: none;
+    border: none;
+    color: #6c757d;
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.25rem 0.4rem;
+    cursor: pointer;
+}
+
+.copilot-icon-btn:hover {
+    color: #343a40;
+}
+
+.copilot-sidebar-subheader {
+    font-size: 0.78rem;
+    padding: 0.3rem 0 0.5rem;
+}
+
+.copilot-model-row {
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    margin-bottom: 0.5rem;
+}
+
+.copilot-model-row label {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
 .copilot-log {
-    max-height: 18rem;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     font-size: 0.9rem;
 }
 
-.copilot-log:empty {
-    display: none;
+.copilot-log:empty::before {
+    content: "Ask a question about this chart, or attach a document to get started.";
+    color: #adb5bd;
+    font-size: 0.85rem;
+    font-style: italic;
 }
 
 .copilot-msg {
@@ -32,8 +131,33 @@
     border-left: 3px solid rgba(220, 53, 69, 0.6);
 }
 
+.copilot-msg-upload {
+    background-color: rgba(40, 167, 69, 0.08);
+    border-left: 3px solid rgba(40, 167, 69, 0.6);
+}
+
+.copilot-msg-upload-error {
+    background-color: rgba(220, 53, 69, 0.08);
+    border-left: 3px solid rgba(220, 53, 69, 0.6);
+}
+
 .copilot-tools {
     font-size: 0.75rem;
     opacity: 0.7;
     margin-top: 0.25rem;
+}
+
+.copilot-upload-panel {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 0.25rem;
+    padding: 0.6rem;
+    margin: 0.5rem 0;
+    background: rgba(0, 0, 0, 0.02);
+}
+
+@media (max-width: 767.98px) {
+    .copilot-sidebar {
+        width: 100vw;
+        max-width: 100vw;
+    }
 }
