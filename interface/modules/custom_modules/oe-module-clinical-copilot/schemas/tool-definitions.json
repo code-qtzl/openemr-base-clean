@@ -38,6 +38,15 @@
             }
         },
         {
+            "name": "get_extracted_documents",
+            "description": "Structured data previously extracted from documents (lab PDFs and intake forms) the physician has uploaded and attached to this patient's chart via the Clinical Co-Pilot, most recent first -- document type, when it was extracted, and the extracted fields as JSON. Use for questions about an uploaded lab report, intake form, or any other attached document.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
             "name": "submit_answer",
             "description": "Give your final answer to the clinician. Every clinical claim must cite exactly one tool call made this turn as its source_tool. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
             "input_schema": {

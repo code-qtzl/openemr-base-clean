@@ -24,12 +24,18 @@ require_once __DIR__ . '/../../../../../../interface/modules/custom_modules/oe-m
 
 class ChartContextToolsDefinitionsTest extends TestCase
 {
-    public function testDefinitionsReturnsExactlyTheFourAllowlistedChartTools(): void
+    public function testDefinitionsReturnsExactlyTheFiveAllowlistedChartTools(): void
     {
         $names = array_column(ChartContextTools::definitions(), 'name');
 
         self::assertSame(
-            ['get_a1c_series', 'get_active_problems', 'get_medications', 'get_recent_encounters'],
+            [
+                'get_a1c_series',
+                'get_active_problems',
+                'get_medications',
+                'get_recent_encounters',
+                'get_extracted_documents',
+            ],
             $names,
         );
     }

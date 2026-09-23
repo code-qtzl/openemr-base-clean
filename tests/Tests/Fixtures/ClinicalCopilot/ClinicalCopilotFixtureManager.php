@@ -3,10 +3,11 @@
 /**
  * Test fixtures for the Clinical Co-Pilot's DB-backed integration suite.
  *
- * Installs patients plus rows in the four tables ChartContextTools queries
+ * Installs patients plus rows in the tables ChartContextTools queries
  * (procedure_order/procedure_report/procedure_result for A1c, lists for
  * active problems, prescriptions for medications, form_encounter for recent
- * encounters), so tests can exercise real SQL rather than a mocked
+ * encounters, clinical_copilot_extracted_document for previously-uploaded
+ * documents), so tests can exercise real SQL rather than a mocked
  * ChartContextTools (the class is final and DB-backed by design -- see its
  * own docblock).
  *
@@ -156,6 +157,26 @@ final class ClinicalCopilotFixtureManager
         $this->seedMedication($pid, $drug, $startDate, endDate: null);
     }
 
+    /**
+     * One row ChartContextTools::extractedDocuments() reads -- mirrors the
+     * `{"doc_type": ..., "fields": {...}}` envelope
+     * DocumentIngestionPipeline actually persists, so tests exercise the
+     * same shape production code writes rather than a simplified one.
+     *
+     * @param array<string, mixed> $fields
+     */
+    public function seedExtractedDocument(int $pid, string $docType, array $fields): void
+    {
+        $fieldsJson = json_encode(['doc_type' => $docType, 'fields' => $fields], JSON_THROW_ON_ERROR);
+
+        QueryUtils::sqlInsert(
+            'INSERT INTO `clinical_copilot_extracted_document`
+                (`pid`, `doc_type`, `fields_json`, `created_at`, `last_updated`)
+             VALUES (?, ?, ?, NOW(), NOW())',
+            [$pid, $docType, $fieldsJson],
+        );
+    }
+
     /** One recent-encounter row ChartContextTools::recentEncounters() reads. */
     public function seedEncounter(
         int $pid,
@@ -237,6 +258,10 @@ final class ClinicalCopilotFixtureManager
             QueryUtils::sqlStatementThrowException('DELETE FROM `prescriptions` WHERE `patient_id` = ?', [$pid]);
             QueryUtils::sqlStatementThrowException('DELETE FROM `form_encounter` WHERE `pid` = ?', [$pid]);
             QueryUtils::sqlStatementThrowException('DELETE FROM `clinical_copilot_log` WHERE `pid` = ?', [$pid]);
+            QueryUtils::sqlStatementThrowException(
+                'DELETE FROM `clinical_copilot_extracted_document` WHERE `pid` = ?',
+                [$pid],
+            );
         // @codeCoverageIgnoreStart Defensive catch — only fires on unexpected DB errors during cleanup.
         } catch (SqlQueryException $e) {
             \OpenEMR\BC\ServiceContainer::getLogger()->error('Clinical Co-Pilot fixture cleanup failed', [

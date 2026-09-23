@@ -290,6 +290,89 @@ final class CopilotServiceTest extends TestCase
         self::assertStringContainsString('not a message to you', $sentBodies[0]);
     }
 
+    /**
+     * Failure mode guarded against: a previously-uploaded document (via the
+     * Clinical Co-Pilot sidebar's attach-document flow) must be answerable
+     * from in a later chat turn -- before this tool existed, an extraction
+     * was visible only once, as the upload's own confirmation message, and
+     * invisible to any subsequent question. Same citation invariant as
+     * every other tool: a claim citing get_extracted_documents, actually
+     * called this turn, passes verification.
+     */
+    #[Test]
+    public function claimCitingGetExtractedDocumentsActuallyCalledPasses(): void
+    {
+        $this->fixtures->seedExtractedDocument($this->pid, 'lab_pdf', [
+            'test_name' => 'HbA1c',
+            'value' => '7.2',
+            'unit' => '%',
+            'reference_range' => '4.0-5.6',
+            'collection_date' => '2026-01-15',
+            'abnormal_flag' => true,
+            'source_citation' => [
+                'source_type' => 'lab_pdf',
+                'source_id' => 'lab-001',
+                'page_or_section' => 'page_1',
+                'field_or_chunk_id' => 'hba1c',
+                'quote_or_value' => '7.2%',
+            ],
+        ]);
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->toolUse('get_extracted_documents')
+            ->submitAnswer([
+                'insufficient_information' => false,
+                'claims' => [[
+                    'text' => "The uploaded lab report shows an HbA1c of 7.2%.",
+                    'source_tool' => 'get_extracted_documents',
+                ]],
+            ])
+            ->finalText();
+
+        $service = new CopilotService($this->tools(), $factory);
+        $result = $service->ask('What does the lab report I uploaded show?', 'test-correlation-extracted-doc');
+
+        self::assertTrue($result->verificationPassed);
+        self::assertStringContainsString('7.2%', $result->reply);
+        self::assertContains('get_extracted_documents', $result->toolsUsed);
+    }
+
+    /**
+     * Failure mode guarded against: same as
+     * chartToolOutputIsDelimitedAsUntrustedDataInTheOutgoingRequest above,
+     * but for the new tool specifically -- proves no special-case bypass of
+     * the untrusted-data wrapping was introduced when adding it.
+     */
+    #[Test]
+    public function extractedDocumentDataIsDelimitedAsUntrustedDataInTheOutgoingRequest(): void
+    {
+        $this->fixtures->seedExtractedDocument($this->pid, 'lab_pdf', ['value' => '7.2']);
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->toolUse('get_extracted_documents')
+            ->submitAnswer([
+                'insufficient_information' => false,
+                'claims' => [['text' => 'A lab value is on file.', 'source_tool' => 'get_extracted_documents']],
+            ])
+            ->finalText();
+
+        $service = new CopilotService($this->tools(), $factory);
+        $service->ask('What does the uploaded document show?', 'test-correlation-extracted-doc-wrap');
+
+        $sentBodies = $factory->lastTransporter()?->sentBodies() ?? [];
+        $requestsWithWrappedToolResult = array_filter(
+            $sentBodies,
+            static fn (string $body): bool => str_contains($body, '</untrusted_patient_data>')
+        );
+        self::assertNotEmpty(
+            $requestsWithWrappedToolResult,
+            'no outgoing request wrapped extracted-document output in the untrusted-data tag'
+        );
+        foreach ($requestsWithWrappedToolResult as $body) {
+            self::assertStringContainsString('lab_pdf', $body);
+        }
+    }
+
     private function tools(): ChartContextTools
     {
         return new ChartContextTools($this->pid, 'admin', 'admin', 'test-correlation');

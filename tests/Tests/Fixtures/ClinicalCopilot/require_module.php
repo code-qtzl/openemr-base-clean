@@ -46,6 +46,8 @@ require_once $moduleSrc . '/Service/Result/MedicationRow.php';
 require_once $moduleSrc . '/Service/Result/MedicationsResult.php';
 require_once $moduleSrc . '/Service/Result/RecentEncounterRow.php';
 require_once $moduleSrc . '/Service/Result/RecentEncountersResult.php';
+require_once $moduleSrc . '/Service/Result/ExtractedDocumentRow.php';
+require_once $moduleSrc . '/Service/Result/ExtractedDocumentsResult.php';
 require_once $moduleSrc . '/Service/ToolSchemaRegistry.php';
 require_once $moduleSrc . '/Service/ChartContextTools.php';
 require_once $moduleSrc . '/Service/CopilotInteractionLogger.php';

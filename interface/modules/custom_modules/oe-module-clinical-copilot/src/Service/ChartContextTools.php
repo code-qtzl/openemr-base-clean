@@ -37,6 +37,8 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cResultRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentRow;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncounterRow;
@@ -68,7 +70,7 @@ final readonly class ChartContextTools
     }
 
     /**
-     * The four allowlisted chart-reading tools' definitions, in Anthropic
+     * The five allowlisted chart-reading tools' definitions, in Anthropic
      * Messages API shape -- loaded from schemas/tool-definitions.json (the
      * contract), not hand-written here (PUNCH_LIST_2.md Item 4).
      *
@@ -82,7 +84,13 @@ final readonly class ChartContextTools
     {
         return array_map(
             ToolSchemaRegistry::get(...),
-            ['get_a1c_series', 'get_active_problems', 'get_medications', 'get_recent_encounters'],
+            [
+                'get_a1c_series',
+                'get_active_problems',
+                'get_medications',
+                'get_recent_encounters',
+                'get_extracted_documents',
+            ],
         );
     }
 
@@ -91,13 +99,14 @@ final readonly class ChartContextTools
      */
     public function call(
         string $toolName
-    ): A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult {
+    ): A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult|ExtractedDocumentsResult {
         $result = match ($toolName) {
-            'get_a1c_series'        => $this->a1cSeries(),
-            'get_active_problems'   => $this->activeProblems(),
-            'get_medications'       => $this->medications(),
-            'get_recent_encounters' => $this->recentEncounters(),
-            default                 => $this->rejectUnknownTool($toolName),
+            'get_a1c_series'          => $this->a1cSeries(),
+            'get_active_problems'     => $this->activeProblems(),
+            'get_medications'         => $this->medications(),
+            'get_recent_encounters'   => $this->recentEncounters(),
+            'get_extracted_documents' => $this->extractedDocuments(),
+            default                   => $this->rejectUnknownTool($toolName),
         };
 
         $this->audit(
@@ -335,6 +344,53 @@ final readonly class ChartContextTools
             encounterDate: self::nullableString($row['encounter_date'] ?? null),
             reason: self::nullableString($row['reason'] ?? null),
             encounterTypeDescription: self::nullableString($row['encounter_type_description'] ?? null),
+        );
+    }
+
+    /**
+     * Documents (lab PDFs, intake forms) previously uploaded and extracted
+     * via the Clinical Co-Pilot sidebar's attach-document flow
+     * (DocumentIngestionPipeline), most recent first. Queried directly
+     * against `clinical_copilot_extracted_document`, the same pattern every
+     * other tool here uses, rather than routed through
+     * SqlExtractedDocumentStore -- that class only offers a by-id find(),
+     * no by-patient lookup, and per-tool queries in this class are always
+     * hand-written inline.
+     */
+    private function extractedDocuments(): ExtractedDocumentsResult
+    {
+        try {
+            $records = QueryUtils::fetchRecords(
+                'SELECT `doc_type`, `fields_json`, `created_at`
+                   FROM `clinical_copilot_extracted_document`
+                  WHERE `pid` = ?
+                  ORDER BY `created_at` DESC
+                  LIMIT ' . self::MAX_ROWS,
+                [$this->patientId]
+            );
+        } catch (SqlQueryException $e) {
+            $this->logToolFailure('get_extracted_documents', $e);
+
+            return ExtractedDocumentsResult::failed('Could not retrieve that part of the chart.');
+        }
+
+        return ExtractedDocumentsResult::ok(array_map(self::mapExtractedDocumentRow(...), $records));
+    }
+
+    /**
+     * QueryUtils::fetchRecords() only guarantees `array<mixed>` per row
+     * (array-key, not string) -- this is what array_map's contravariance
+     * check on the callback actually needs to see; the body still indexes
+     * by the string column names the query selects.
+     *
+     * @param array<array-key, mixed> $row
+     */
+    private static function mapExtractedDocumentRow(array $row): ExtractedDocumentRow
+    {
+        return new ExtractedDocumentRow(
+            docType: self::nullableString($row['doc_type'] ?? null),
+            extractedAt: self::nullableString($row['created_at'] ?? null),
+            fieldsJson: self::nullableString($row['fields_json'] ?? null),
         );
     }
 
