@@ -7,17 +7,23 @@
  * validation passes -- stores the source document in OpenEMR and persists
  * the extraction, each linked back to the other.
  *
- * Not wired to an HTTP endpoint or the live chat tool loop yet -- this is
- * the callable pipeline itself; see Eval/README.md's precedent (the eval
- * validators built the same way: standalone, tested logic first, live
- * wiring deferred and documented explicitly rather than dropped silently).
+ * Wired into the live chat tool loop (ChartContextTools::extractedDocuments())
+ * and, via CopilotDocumentUploadController, the sidebar's attach-document
+ * flow -- this class is the actual attach_and_extract implementation both
+ * call into.
  *
- * Known MVP gap: the document-storage step is not wrapped in a database
- * transaction with the extraction-row insert. If storeDocument() throws
- * after save() has already inserted the extraction row, that row persists
- * with a null document_id -- a recoverable, visible partial-failure state
- * (findable via `document_id IS NULL`), not a silent inconsistency, but
- * not yet auto-repaired either.
+ * The document-storage step is not wrapped in a real database transaction
+ * with the extraction-row insert -- DocumentAttachmentService::store() does
+ * its own file I/O (CouchDB or local filesystem, per Document::createDocument())
+ * alongside its own SQL, not reliably coverable by QueryUtils' ADODB
+ * transaction wrapper. Instead, a failure there (or in attachDocumentId())
+ * is treated as a compensating action: the already-inserted extraction row
+ * is deleted before the original exception propagates, so a failed ingest
+ * leaves nothing behind rather than an orphaned row with a null
+ * document_id. If that compensating delete itself fails (e.g. the DB
+ * connection that just failed the insert is also gone), it is logged
+ * rather than swallowed, and the original exception still propagates --
+ * the caller always learns about the real failure either way.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -28,7 +34,10 @@ declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Extraction;
 
+use OpenEMR\BC\ServiceContainer;
+use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
+use Throwable;
 
 final class DocumentIngestionPipeline
 {
@@ -57,9 +66,39 @@ final class DocumentIngestionPipeline
 
         $extractionId = $this->store->save($patientId, $docType, $fieldsJson);
 
-        $documentId = $this->attachmentService->store($patientId, $docType, $payload, $extractionId);
-        $this->store->attachDocumentId($extractionId, $documentId);
+        try {
+            $documentId = $this->attachmentService->store($patientId, $docType, $payload, $extractionId);
+            $this->store->attachDocumentId($extractionId, $documentId);
+        } catch (Throwable $e) {
+            $this->rollBackExtraction($extractionId, $e);
+
+            throw $e;
+        }
 
         return DocumentIngestionResult::success($extractionId, $documentId, $extraction->document);
+    }
+
+    /**
+     * Best-effort compensating delete for the row save() already inserted,
+     * so a failed ingest leaves nothing behind. Never lets a cleanup
+     * failure mask the original error -- see class docblock. Catches only
+     * SqlQueryException (delete()'s one documented throw type), not a bare
+     * Throwable -- this project's PHPStan rules forbid swallowing Throwable
+     * because it would also catch a real \Error.
+     */
+    private function rollBackExtraction(int $extractionId, Throwable $originalException): void
+    {
+        try {
+            $this->store->delete($extractionId);
+        } catch (SqlQueryException $cleanupException) {
+            ServiceContainer::getLogger()->error(
+                'Clinical Co-Pilot failed to roll back an orphaned extraction row after a downstream failure',
+                [
+                    'extractionId' => $extractionId,
+                    'originalException' => $originalException,
+                    'cleanupException' => $cleanupException,
+                ],
+            );
+        }
     }
 }

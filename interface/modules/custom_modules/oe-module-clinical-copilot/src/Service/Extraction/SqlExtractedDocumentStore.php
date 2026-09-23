@@ -70,4 +70,20 @@ final class SqlExtractedDocumentStore
 
         return ExtractedDocumentRecord::fromRow($row);
     }
+
+    /**
+     * DocumentIngestionPipeline's compensating action when document storage
+     * fails after this row was already inserted -- see its docblock. Not
+     * used for anything else; a normal, successful extraction is never
+     * deleted.
+     *
+     * @throws \OpenEMR\Common\Database\SqlQueryException
+     */
+    public function delete(int $extractionId): void
+    {
+        QueryUtils::sqlStatementThrowException(
+            'DELETE FROM `clinical_copilot_extracted_document` WHERE `id` = ?',
+            [$extractionId],
+        );
+    }
 }

@@ -24,14 +24,17 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ScriptedAnthropicClie
 
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
+use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentAttachmentService;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentExtractionService;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentIngestionPipeline;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentPayload;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\SqlExtractedDocumentStore;
+use OpenEMR\Services\DocumentService;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedAnthropicClientFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 final class DocumentIngestionPipelineTest extends TestCase
 {
@@ -140,6 +143,63 @@ final class DocumentIngestionPipelineTest extends TestCase
         self::assertIsArray($countRow);
         self::assertIsNumeric($countRow['c']);
         self::assertSame(0, (int) $countRow['c']);
+    }
+
+    /**
+     * Failure mode guarded against: before this test existed, a document-
+     * storage failure after save() had already inserted the extraction row
+     * left that row behind with a null document_id -- an orphaned,
+     * findable-but-unrepaired partial state. Forces that failure
+     * deterministically (a DocumentService double whose isValidPath()
+     * always returns false, so DocumentAttachmentService::store() throws
+     * before ever touching \Document::createDocument()) and proves the
+     * pipeline's compensating delete leaves nothing behind at all: the
+     * exception still propagates, and the extraction row is gone.
+     */
+    #[Test]
+    public function documentStorageFailureRollsBackTheOrphanedExtractionRow(): void
+    {
+        $pid = $this->installPrimaryPatient();
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode([
+            'doc_type' => 'lab_pdf',
+            'fields' => self::VALID_LAB_FIELDS,
+        ], JSON_THROW_ON_ERROR));
+
+        $alwaysInvalidPathDocumentService = new class () extends DocumentService {
+            public function isValidPath(mixed $path): bool
+            {
+                return false;
+            }
+        };
+        $pipeline = new DocumentIngestionPipeline(
+            new DocumentExtractionService($factory),
+            new SqlExtractedDocumentStore(),
+            new DocumentAttachmentService($alwaysInvalidPathDocumentService),
+        );
+        $payload = DocumentPayload::fromBytes('lab.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        try {
+            $pipeline->ingest($pid, 'corr-pipeline-rollback', $payload, SchemaDocType::LabPdf);
+            self::fail('Expected DocumentAttachmentService::store() to throw.');
+        } catch (RuntimeException) {
+            // Expected -- the invalid category path forces this.
+        }
+
+        $countRow = QueryUtils::querySingleRow(
+            'SELECT COUNT(*) AS c FROM `clinical_copilot_extracted_document` WHERE `pid` = ?',
+            [$pid],
+        );
+        self::assertIsArray($countRow);
+        self::assertIsNumeric($countRow['c']);
+        self::assertSame(0, (int) $countRow['c'], 'a failed ingest must not leave an orphaned extraction row behind');
+
+        $documentCountRow = QueryUtils::querySingleRow(
+            'SELECT COUNT(*) AS c FROM `documents` WHERE `foreign_id` = ?',
+            [$pid],
+        );
+        self::assertIsArray($documentCountRow);
+        self::assertIsNumeric($documentCountRow['c']);
+        self::assertSame(0, (int) $documentCountRow['c']);
     }
 
     private function installPrimaryPatient(): int
