@@ -6,6 +6,12 @@
  * grounding it. See .claude/skills/eval-citation-validator/SKILL.md for the
  * contract this mirrors.
  *
+ * Originally lived under Service\Eval\Citation as an eval-only concern;
+ * relocated here once the live Supervisor/CopilotService submit_answer path
+ * adopted this same five-field shape for VerificationClaim, since it is now
+ * the citation contract for both the live gate and the offline eval gate,
+ * not just the latter.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -13,7 +19,7 @@
 
 declare(strict_types=1);
 
-namespace OpenEMR\Modules\ClinicalCopilot\Service\Eval\Citation;
+namespace OpenEMR\Modules\ClinicalCopilot\Service\Citation;
 
 final readonly class Citation
 {
@@ -30,7 +36,7 @@ final readonly class Citation
      * Parses an untrusted `citation` payload (from model output, a golden-set
      * fixture, or any other external shape) into a typed value. A field that
      * is present but not a string is treated the same as an absent field --
-     * CitationValidator rejects it either way -- rather than coercing it.
+     * callers reject either way -- rather than coercing it.
      */
     public static function fromMixed(mixed $raw): ?self
     {

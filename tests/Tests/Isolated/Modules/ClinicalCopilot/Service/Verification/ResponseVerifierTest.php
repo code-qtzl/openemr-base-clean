@@ -15,6 +15,7 @@ namespace OpenEMR\Tests\Isolated\Modules\ClinicalCopilot\Service\Verification;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
 use PHPUnit\Framework\TestCase;
 
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/Citation.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/VerificationClaim.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/VerificationOutcome.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/ResponseVerifier.php';
@@ -48,14 +49,25 @@ class ResponseVerifierTest extends TestCase
         self::assertSame(ResponseVerifier::FALLBACK_REPLY, $outcome->reply);
     }
 
-    public function testFullyCitedClaimPasses(): void
+    public function testFullyCitedChartToolClaimPasses(): void
     {
+        // chart_tool citations are the documented divergence from
+        // CitationValidator's blanket rubric: no page_or_section is supplied
+        // here (a database row has no page), and the claim still passes.
         $outcome = ResponseVerifier::verify(
             [
                 'insufficient_information' => false,
                 'summary' => 'Based on the chart:',
                 'claims' => [
-                    ['text' => 'A1c was 7.2% on 2026-01-10.', 'source_tool' => 'get_a1c_series'],
+                    [
+                        'text' => 'A1c was 7.2% on 2026-01-10.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_a1c_series',
+                            'field_or_chunk_id' => 'value',
+                            'quote_or_value' => '7.2%',
+                        ],
+                    ],
                 ],
             ],
             calledTools: ['get_a1c_series'],
@@ -73,7 +85,7 @@ class ResponseVerifierTest extends TestCase
             [
                 'insufficient_information' => false,
                 'claims' => [
-                    ['text' => 'The patient is improving.', 'source_tool' => null],
+                    ['text' => 'The patient is improving.', 'citation' => null],
                 ],
             ],
             calledTools: ['get_a1c_series'],
@@ -93,11 +105,48 @@ class ResponseVerifierTest extends TestCase
             [
                 'insufficient_information' => false,
                 'claims' => [
-                    ['text' => 'The patient has type 2 diabetes.', 'source_tool' => 'get_active_problems'],
+                    [
+                        'text' => 'The patient has type 2 diabetes.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_active_problems',
+                            'field_or_chunk_id' => 'problem',
+                            'quote_or_value' => 'Type 2 diabetes mellitus',
+                        ],
+                    ],
                 ],
             ],
             calledTools: ['get_a1c_series'],
             toolRowCounts: ['get_a1c_series' => 3],
+        );
+
+        self::assertFalse($outcome->passed);
+    }
+
+    public function testClaimCitingAWorkerNameInsteadOfAToolIsRejected(): void
+    {
+        // CITATION GRANULARITY: consult_chart_worker/consult_document_worker/
+        // consult_evidence_worker are dispatch/handoff concepts, never valid
+        // citations -- a claim citing the worker's own name instead of the
+        // specific tool it called must be rejected the same as citing any
+        // other tool never actually invoked.
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => 'The patient has type 2 diabetes.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'consult_chart_worker',
+                            'field_or_chunk_id' => 'problem',
+                            'quote_or_value' => 'Type 2 diabetes mellitus',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['get_active_problems'],
+            toolRowCounts: ['get_active_problems' => 1],
         );
 
         self::assertFalse($outcome->passed);
@@ -136,6 +185,82 @@ class ResponseVerifierTest extends TestCase
         self::assertFalse($outcome->passed);
     }
 
+    public function testCitationMissingRequiredFieldIsRejected(): void
+    {
+        // field_or_chunk_id is always required, even for chart_tool claims
+        // that are exempt from page_or_section.
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => 'A1c was 7.2% on 2026-01-10.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_a1c_series',
+                            'quote_or_value' => '7.2%',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['get_a1c_series'],
+            toolRowCounts: ['get_a1c_series' => 3],
+        );
+
+        self::assertFalse($outcome->passed);
+    }
+
+    public function testGuidelineCitationMissingPageOrSectionIsRejected(): void
+    {
+        // Unlike chart_tool, a guideline citation DOES need page_or_section
+        // -- a drug label section is a real, meaningful location.
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => 'Metformin is contraindicated in severe renal impairment.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'search_guideline_evidence',
+                            'field_or_chunk_id' => 'chunk-1',
+                            'quote_or_value' => 'Contraindicated in patients with severe renal impairment.',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['search_guideline_evidence'],
+            toolRowCounts: ['search_guideline_evidence' => 1],
+        );
+
+        self::assertFalse($outcome->passed);
+    }
+
+    public function testFullyCitedGuidelineClaimPasses(): void
+    {
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => 'Metformin is contraindicated in severe renal impairment.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'search_guideline_evidence',
+                            'page_or_section' => 'contraindications',
+                            'field_or_chunk_id' => 'chunk-1',
+                            'quote_or_value' => 'Contraindicated in patients with severe renal impairment.',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['search_guideline_evidence'],
+            toolRowCounts: ['search_guideline_evidence' => 1],
+        );
+
+        self::assertTrue($outcome->passed);
+    }
+
     /**
      * PUNCH_LIST.md 1.4(b): a patient with zero medication rows cannot
      * produce a "patient is on X" claim that passes verification, no matter
@@ -147,7 +272,15 @@ class ResponseVerifierTest extends TestCase
             [
                 'insufficient_information' => false,
                 'claims' => [
-                    ['text' => 'The patient is currently taking Metformin.', 'source_tool' => 'get_medications'],
+                    [
+                        'text' => 'The patient is currently taking Metformin.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_medications',
+                            'field_or_chunk_id' => 'drug',
+                            'quote_or_value' => 'Metformin',
+                        ],
+                    ],
                 ],
             ],
             calledTools: ['get_medications'],
@@ -164,7 +297,15 @@ class ResponseVerifierTest extends TestCase
             [
                 'insufficient_information' => false,
                 'claims' => [
-                    ['text' => 'The patient takes Metformin 500mg BID.', 'source_tool' => 'get_medications'],
+                    [
+                        'text' => 'The patient takes Metformin 500mg BID.',
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_medications',
+                            'field_or_chunk_id' => 'drug',
+                            'quote_or_value' => 'Metformin 500mg BID',
+                        ],
+                    ],
                 ],
             ],
             calledTools: ['get_medications'],
@@ -172,5 +313,36 @@ class ResponseVerifierTest extends TestCase
         );
 
         self::assertTrue($outcome->passed);
+    }
+
+    /**
+     * Same failure mode as the medication guard, for the guideline worker: a
+     * claim quoting guideline text when retrieval returned zero chunks is a
+     * fabricated citation regardless of wording.
+     */
+    public function testGuidelineClaimWithZeroChunksIsRejectedRegardlessOfWording(): void
+    {
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => 'Per the label, this drug has no known interactions.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'search_guideline_evidence',
+                            'page_or_section' => 'drug_interactions',
+                            'field_or_chunk_id' => 'chunk-1',
+                            'quote_or_value' => 'No known interactions.',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['search_guideline_evidence'],
+            toolRowCounts: ['search_guideline_evidence' => 0],
+        );
+
+        self::assertFalse($outcome->passed);
+        self::assertStringContainsString('search_guideline_evidence', (string) $outcome->reason);
     }
 }

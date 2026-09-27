@@ -47,8 +47,24 @@
             }
         },
         {
+            "name": "search_guideline_evidence",
+            "description": "Hybrid (keyword + semantic) search over a small clinical-guideline reference corpus (FDA drug-label sections: contraindications, warnings, drug interactions, dosing), reranked for relevance. Returns the top matching evidence chunks with source metadata. Use for questions about a medication's safety profile, interactions, contraindications or dosing guidance -- not for anything specific to this patient's own chart.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for, e.g. a drug name plus the safety question (\"metformin contraindications renal impairment\")."
+                    }
+                },
+                "required": [
+                    "query"
+                ]
+            }
+        },
+        {
             "name": "consult_chart_worker",
-            "description": "Consult the chart-data specialist: returns four structured data sources for this patient in one bundled response, keyed by name -- get_a1c_series, get_active_problems, get_medications, get_recent_encounters. Use for questions about diagnoses, treatment, glycaemic control, or visit history. When citing a claim via submit_answer, cite the specific data-source key inside the bundle (e.g. get_medications), not consult_chart_worker itself.",
+            "description": "Consult the chart-data specialist: returns four structured data sources for this patient in one bundled response, keyed by name -- get_a1c_series, get_active_problems, get_medications, get_recent_encounters. Use for questions about diagnoses, treatment, glycaemic control, or visit history. When citing a claim via submit_answer, its citation.source_id must be the specific data-source key inside the bundle (e.g. get_medications), not consult_chart_worker itself.",
             "input_schema": {
                 "type": "object",
                 "properties": {},
@@ -57,7 +73,7 @@
         },
         {
             "name": "consult_document_worker",
-            "description": "Consult the document-data specialist: returns data previously extracted from documents (lab PDFs and intake forms) the physician has uploaded and attached to this patient's chart, keyed as get_extracted_documents. Use for questions about an uploaded lab report, intake form, or any other attached document. When citing a claim via submit_answer, cite get_extracted_documents, not consult_document_worker itself.",
+            "description": "Consult the document-data specialist: returns data previously extracted from documents (lab PDFs and intake forms) the physician has uploaded and attached to this patient's chart, keyed as get_extracted_documents. Use for questions about an uploaded lab report, intake form, or any other attached document. When citing a claim via submit_answer, its citation.source_id must be get_extracted_documents, not consult_document_worker itself.",
             "input_schema": {
                 "type": "object",
                 "properties": {},
@@ -65,8 +81,24 @@
             }
         },
         {
+            "name": "consult_evidence_worker",
+            "description": "Consult the guideline-evidence specialist: runs a hybrid search over a small clinical-guideline corpus for the given query and returns the top matching evidence chunks, keyed as search_guideline_evidence. Use for questions about a medication's safety profile, interactions, contraindications or dosing guidance. When citing a claim via submit_answer, its citation.source_id must be search_guideline_evidence, not consult_evidence_worker itself.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to search for, e.g. a drug name plus the safety question."
+                    }
+                },
+                "required": [
+                    "query"
+                ]
+            }
+        },
+        {
             "name": "submit_answer",
-            "description": "Give your final answer to the clinician. Every clinical claim must cite exactly one tool call made this turn as its source_tool. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
+            "description": "Give your final answer to the clinician. Every clinical claim must carry a citation object grounding it in a tool call made this turn. citation.source_type is one of chart_tool (structured OpenEMR data), lab_pdf or intake_form (document extraction), or guideline (guideline evidence). citation.source_id is always the specific tool call that supports the claim (e.g. get_medications, get_extracted_documents, search_guideline_evidence) -- never a worker's name (consult_chart_worker/consult_document_worker/consult_evidence_worker are not valid citations). citation.quote_or_value is the exact value or quote grounding the claim. citation.page_or_section and citation.field_or_chunk_id are required for every source_type except chart_tool, where a database row has no page. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -88,14 +120,41 @@
                                     "type": "string",
                                     "description": "The clinical claim, stated plainly."
                                 },
-                                "source_tool": {
-                                    "type": "string",
-                                    "description": "Name of the tool call made this turn whose result supports this claim."
+                                "citation": {
+                                    "type": "object",
+                                    "description": "Where this claim's grounding came from.",
+                                    "properties": {
+                                        "source_type": {
+                                            "type": "string",
+                                            "description": "chart_tool, lab_pdf, intake_form, or guideline."
+                                        },
+                                        "source_id": {
+                                            "type": "string",
+                                            "description": "The specific tool call made this turn that supports this claim, e.g. get_medications."
+                                        },
+                                        "page_or_section": {
+                                            "type": "string",
+                                            "description": "Page or section within the source. Not applicable for chart_tool citations."
+                                        },
+                                        "field_or_chunk_id": {
+                                            "type": "string",
+                                            "description": "The specific field or chunk within the source, e.g. a column name or a retrieval chunk id."
+                                        },
+                                        "quote_or_value": {
+                                            "type": "string",
+                                            "description": "The exact quoted text or value grounding this claim."
+                                        }
+                                    },
+                                    "required": [
+                                        "source_type",
+                                        "source_id",
+                                        "quote_or_value"
+                                    ]
                                 }
                             },
                             "required": [
                                 "text",
-                                "source_tool"
+                                "citation"
                             ]
                         }
                     }

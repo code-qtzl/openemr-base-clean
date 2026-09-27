@@ -363,7 +363,15 @@ final class CopilotChatControllerTest extends TestCase
             ->toolUse('get_recent_encounters')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'No concerning findings this visit.', 'source_tool' => 'get_recent_encounters']],
+                'claims' => [[
+                    'text' => 'No concerning findings this visit.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_recent_encounters',
+                        'field_or_chunk_id' => 'reason',
+                        'quote_or_value' => 'none',
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -408,7 +416,15 @@ final class CopilotChatControllerTest extends TestCase
             ->toolUse('get_active_problems')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'Patient has Type 2 diabetes.', 'source_tool' => 'get_active_problems']],
+                'claims' => [[
+                    'text' => 'Patient has Type 2 diabetes.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_active_problems',
+                        'field_or_chunk_id' => 'title',
+                        'quote_or_value' => 'Type 2 diabetes mellitus',
+                    ],
+                ]],
             ])
             ->finalText();
 

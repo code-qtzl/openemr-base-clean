@@ -18,7 +18,7 @@ declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Eval\FactualConsistency;
 
-use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Citation\Citation;
+use OpenEMR\Modules\ClinicalCopilot\Service\Citation\Citation;
 
 final readonly class FactualConsistencyClaim
 {

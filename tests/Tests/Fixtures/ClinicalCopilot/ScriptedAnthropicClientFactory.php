@@ -16,7 +16,10 @@
  *   (new ScriptedAnthropicClientFactory())
  *       ->toolUse('get_active_problems')
  *       ->submitAnswer(['insufficient_information' => false, 'claims' => [
- *           ['text' => '...', 'source_tool' => 'get_active_problems'],
+ *           ['text' => '...', 'citation' => [
+ *               'source_type' => 'chart_tool', 'source_id' => 'get_active_problems',
+ *               'field_or_chunk_id' => 'title', 'quote_or_value' => '...',
+ *           ]],
  *       ]])
  *       ->finalText();
  *

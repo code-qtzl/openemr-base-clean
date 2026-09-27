@@ -68,7 +68,12 @@ $content = match (true) {
             'insufficient_information' => false,
             'claims' => [[
                 'text' => 'See the active problems on file for this patient.',
-                'source_tool' => 'get_active_problems',
+                'citation' => [
+                    'source_type' => 'chart_tool',
+                    'source_id' => 'get_active_problems',
+                    'field_or_chunk_id' => 'title',
+                    'quote_or_value' => 'active problems on file',
+                ],
             ]],
         ],
     ]],

@@ -2,7 +2,14 @@
 
 /**
  * One clinical claim from the model's forced submit_answer tool call, and
- * the tool it says supports it.
+ * the citation metadata it says supports it.
+ *
+ * Carries the same five-field Citation contract
+ * (source_type/source_id/page_or_section/field_or_chunk_id/quote_or_value)
+ * as the offline citation_present eval gate
+ * (Service\Eval\Citation\ClinicalClaim/CitationValidator) -- see Citation's
+ * own docblock for why the value object is shared while the two claim
+ * classes are kept separate.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -13,11 +20,13 @@ declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Verification;
 
+use OpenEMR\Modules\ClinicalCopilot\Service\Citation\Citation;
+
 final readonly class VerificationClaim
 {
     private function __construct(
         public string $text,
-        public ?string $sourceTool,
+        public ?Citation $citation,
     ) {
     }
 
@@ -26,6 +35,11 @@ final readonly class VerificationClaim
      * tool-call input is untrusted, schema-shaped JSON, not a guaranteed
      * type -- this is the one place that turns it into a typed value or
      * rejects it outright, so nothing downstream has to re-check shapes.
+     *
+     * A citation that is present but not itself a valid array is treated as
+     * absent (Citation::fromMixed() returns null), not as a parse failure --
+     * ResponseVerifier's "citation missing" rejection path covers that case
+     * identically to a claim with no citation key at all.
      */
     public static function fromMixed(mixed $raw): ?self
     {
@@ -38,11 +52,9 @@ final readonly class VerificationClaim
             return null;
         }
 
-        $sourceTool = $raw['source_tool'] ?? null;
-        if ($sourceTool !== null && !is_string($sourceTool)) {
-            return null;
-        }
+        $rawCitation = $raw['citation'] ?? null;
+        $citation = $rawCitation === null ? null : Citation::fromMixed($rawCitation);
 
-        return new self(trim($text), $sourceTool);
+        return new self(trim($text), $citation);
     }
 }

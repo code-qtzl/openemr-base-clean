@@ -2,11 +2,20 @@
 
 /**
  * One clinical claim from a co-pilot response, paired with the citation
- * metadata (if any) offered as its grounding. Distinct from
- * OpenEMR\Modules\ClinicalCopilot\Service\Verification\VerificationClaim,
- * which only tracks which tool was called this turn -- this DTO carries the
- * richer source_type/source_id/page_or_section/field_or_chunk_id/
- * quote_or_value contract the citation eval validates against.
+ * metadata (if any) offered as its grounding.
+ *
+ * Both this DTO and OpenEMR\Modules\ClinicalCopilot\Service\Verification\
+ * VerificationClaim now parse the same five-field Citation contract
+ * (source_type/source_id/page_or_section/field_or_chunk_id/quote_or_value) --
+ * they are kept as two separate classes anyway, deliberately, because they
+ * serve two different behaviors with different failure modes: VerificationClaim
+ * feeds ResponseVerifier's safety-critical live reject-to-fallback decision,
+ * while this class feeds CitationValidator's report-only offline eval gate.
+ * Coupling those two *behaviors* to one shared claim class would let a future
+ * eval-only rule change silently ripple into live rejection behavior, which
+ * is a worse outcome than the duplication. The underlying Citation value
+ * object is a safe, inert five-tuple to share; the two workflow entry points
+ * that consume it are not.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -16,6 +25,8 @@
 declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Eval\Citation;
+
+use OpenEMR\Modules\ClinicalCopilot\Service\Citation\Citation;
 
 final readonly class ClinicalClaim
 {

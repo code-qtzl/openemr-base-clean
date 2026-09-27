@@ -91,7 +91,15 @@ final class CopilotServiceTest extends TestCase
         $factory = (new ScriptedAnthropicClientFactory())
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'Patient has diabetes.', 'source_tool' => 'get_active_problems']],
+                'claims' => [[
+                    'text' => 'Patient has diabetes.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_active_problems',
+                        'field_or_chunk_id' => 'title',
+                        'quote_or_value' => 'Diabetes',
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -117,7 +125,15 @@ final class CopilotServiceTest extends TestCase
             ->toolUse('get_active_problems')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'Patient has Type 2 diabetes.', 'source_tool' => 'get_active_problems']],
+                'claims' => [[
+                    'text' => 'Patient has Type 2 diabetes.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_active_problems',
+                        'field_or_chunk_id' => 'title',
+                        'quote_or_value' => 'Type 2 diabetes mellitus',
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -144,7 +160,15 @@ final class CopilotServiceTest extends TestCase
             ->toolUse('get_active_problems')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'Patient takes metformin.', 'source_tool' => 'get_medications']],
+                'claims' => [[
+                    'text' => 'Patient takes metformin.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_medications',
+                        'field_or_chunk_id' => 'drug',
+                        'quote_or_value' => 'Metformin',
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -172,7 +196,15 @@ final class CopilotServiceTest extends TestCase
             ->toolUse('get_medications')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'No active medications are on file.', 'source_tool' => 'get_medications']],
+                'claims' => [[
+                    'text' => 'No active medications are on file.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_medications',
+                        'field_or_chunk_id' => 'drug',
+                        'quote_or_value' => 'none',
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -258,7 +290,15 @@ final class CopilotServiceTest extends TestCase
             ->toolUse('get_active_problems')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'One active problem on file.', 'source_tool' => 'get_active_problems']],
+                'claims' => [[
+                    'text' => 'One active problem on file.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_active_problems',
+                        'field_or_chunk_id' => 'title',
+                        'quote_or_value' => $injection,
+                    ],
+                ]],
             ])
             ->finalText();
 
@@ -324,7 +364,13 @@ final class CopilotServiceTest extends TestCase
                 'insufficient_information' => false,
                 'claims' => [[
                     'text' => "The uploaded lab report shows an HbA1c of 7.2%.",
-                    'source_tool' => 'get_extracted_documents',
+                    'citation' => [
+                        'source_type' => 'lab_pdf',
+                        'source_id' => 'get_extracted_documents',
+                        'page_or_section' => 'page_1',
+                        'field_or_chunk_id' => 'hba1c',
+                        'quote_or_value' => '7.2%',
+                    ],
                 ]],
             ])
             ->finalText();
@@ -352,7 +398,16 @@ final class CopilotServiceTest extends TestCase
             ->toolUse('get_extracted_documents')
             ->submitAnswer([
                 'insufficient_information' => false,
-                'claims' => [['text' => 'A lab value is on file.', 'source_tool' => 'get_extracted_documents']],
+                'claims' => [[
+                    'text' => 'A lab value is on file.',
+                    'citation' => [
+                        'source_type' => 'lab_pdf',
+                        'source_id' => 'get_extracted_documents',
+                        'page_or_section' => 'page_1',
+                        'field_or_chunk_id' => 'value',
+                        'quote_or_value' => '7.2',
+                    ],
+                ]],
             ])
             ->finalText();
 

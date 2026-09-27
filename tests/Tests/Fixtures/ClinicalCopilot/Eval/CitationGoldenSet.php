@@ -156,6 +156,70 @@ final class CitationGoldenSet
                 expectedCitationPresent: false,
                 tags: ['negative', 'unsupported'],
             ),
+            new CitationGoldenSetCase(
+                id: 'valid-guideline-evidence',
+                description: 'A medication-safety claim grounded in EvidenceRetrieverWorker\'s hybrid RAG over the guideline corpus.',
+                claims: [
+                    [
+                        'claim' => 'Metformin is contraindicated in patients with severe renal impairment.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'metformin-hcl-label',
+                            'page_or_section' => 'contraindications',
+                            'field_or_chunk_id' => 'chunk-3',
+                            'quote_or_value' => 'Metformin is contraindicated in patients with severe renal impairment.',
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: true,
+                tags: ['positive', 'guideline'],
+            ),
+            new CitationGoldenSetCase(
+                id: 'guideline-citation-missing-quote',
+                description: 'A guideline-sourced citation with every field present except the grounding quote.',
+                claims: [
+                    [
+                        'claim' => 'Metformin is contraindicated in patients with severe renal impairment.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'metformin-hcl-label',
+                            'page_or_section' => 'contraindications',
+                            'field_or_chunk_id' => 'chunk-3',
+                            'quote_or_value' => '',
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: false,
+                tags: ['negative', 'guideline', 'partial'],
+            ),
+            new CitationGoldenSetCase(
+                id: 'mixed-source-types-all-cited',
+                description: 'A response combining a chart-data claim and a guideline-evidence claim, both fully grounded.',
+                claims: [
+                    [
+                        'claim' => "The patient's most recent A1C was 6.4% on 2026-01-15.",
+                        'citation' => [
+                            'source_type' => 'chart_tool',
+                            'source_id' => 'get_a1c_series',
+                            'page_or_section' => 'n/a',
+                            'field_or_chunk_id' => 'value',
+                            'quote_or_value' => '6.4%',
+                        ],
+                    ],
+                    [
+                        'claim' => 'Given her renal history, metformin would be contraindicated if adjusted.',
+                        'citation' => [
+                            'source_type' => 'guideline',
+                            'source_id' => 'metformin-hcl-label',
+                            'page_or_section' => 'contraindications',
+                            'field_or_chunk_id' => 'chunk-3',
+                            'quote_or_value' => 'Metformin is contraindicated in patients with severe renal impairment.',
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: true,
+                tags: ['positive', 'guideline', 'multi_claim'],
+            ),
         ];
     }
 }
