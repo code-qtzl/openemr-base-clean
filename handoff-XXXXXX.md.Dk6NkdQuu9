@@ -1,0 +1,135 @@
+# Handoff: OpenEMR Clinical Co-Pilot — AgentForge2 Week 2
+
+**Repo**: `openemr-base-clean` (this session's copy points to GitLab;
+the new directory this handoff is for points the same repo at GitHub
+instead — otherwise identical). Branch: `main`. All work below is
+already committed — nothing is sitting uncommitted in the working tree
+except files the user chose not to bring over.
+
+## Read this first
+
+`AgentForge2.md` (repo root) is the assignment spec everything below
+implements against. `interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/README.md`
+tracks the eval-gate layer specifically.
+
+## What shipped this session, in order (git log has full detail — every
+commit message documents its own rationale, tradeoffs, and verification
+results in depth; do not re-derive what's already there)
+
+1. `957d73ba07`, `69f3f906ba` — two pre-existing-bug fixes (Railway proxy
+   keep-alive, a missing table on Railway boot). Unrelated to everything
+   after.
+2. `5a2a448e14` → `048c284b27` — the AgentForge2 eval-gate layer. Built
+   `eval-schema-validator`, `eval-factually-consistent-validator`,
+   `eval-safe-refusal-validator`, `eval-phi-log-guard` skills + their
+   validators (`SchemaValidator`, `FactualConsistencyValidator`,
+   `SafeRefusalValidator`, `PhiLogGuardValidator`), joining the
+   pre-existing `citation_present`/`CitationValidator`. All 5 required
+   rubric categories now have a skill doc + tested validator. **None of
+   these 5 validators are wired into the live chat path** — they're
+   eval-gate tooling (golden sets + PHPUnit), not yet exercised against
+   real production responses. See `Eval/README.md`.
+3. `c0efcac95f` — `attach_and_extract` (`src/Service/Extraction/`):
+   upload → VLM-extract via Claude's native `document`/`image` content
+   blocks → self-validate against `SchemaValidator` → store in OpenEMR →
+   persist, all linked. New table `clinical_copilot_extracted_document`.
+4. `5a09622bc4` — redesigned the Co-Pilot from an inline dashboard card
+   into a slide-out sidebar (open by default, closeable, reopen tab),
+   and fully wired the attach-document UI to (3) via a new
+   `CopilotDocumentUploadController`.
+5. `8e54e784aa` — added `get_extracted_documents` as a 5th chart-reading
+   tool so the chat model can reference previously-uploaded documents in
+   *later* turns, not just the upload's one-time confirmation message.
+6. `2ec0bd293a` — 10 synthetic intake-form PDFs in `intake-forms/` for
+   manually exercising the upload flow (`existing-patient/` ones are
+   grounded in real dev-DB Synthea patients pid 2/7/18/20/25).
+7. `a2e4042ff6` — fixed a partial-failure gap in (3): a document-storage
+   failure now rolls back the already-inserted extraction row instead of
+   leaving an orphan.
+8. `8d0607fc75` — AgentForge2 Core Requirement #4, first pass:
+   `Supervisor` + `ChartQaWorker` + `IntakeExtractorWorker`
+   (`src/Service/Supervisor/`). **Not wired into `CopilotChatController`
+   yet** — `CopilotService` (the original single-agent tool loop) is
+   still the live entry point. Read `Supervisor.php`'s own class
+   docblock before touching anything in this namespace — it documents a
+   safety-relevant citation-granularity decision (claims must cite the
+   specific tool, e.g. `get_medications`, never the worker name) that a
+   PUNCH_LIST.md 1.4(b) guard depends on.
+
+## What's explicitly NOT done (by design, not oversight)
+
+- **Evidence-retriever worker + RAG subsystem**: not started at all. No
+  corpus, no embeddings, no vector search, no reranker exist anywhere in
+  this codebase. This needs its own scoping conversation before any
+  code — it pulls in new infrastructure and cost decisions nothing else
+  here has needed.
+- **Supervisor is not the live entry point.** Swapping
+  `CopilotChatController` from `CopilotService` to `Supervisor` is a
+  real, un-taken next step.
+- Stale git worktrees exist from earlier work
+  (`docs/stage5-architecture-plan` missing, `agent-requirements`
+  invalid, `video-script` partial — check `openemr-cmd worktree list`).
+  Pre-existing, not created this session, not urgent.
+
+## Environment/workflow gotchas worth knowing up front
+
+- **Test iteration**: `openemr-cmd st`/`ut`/`pit` silently ignore
+  `--filter` (documented in `Eval/README.md`). Use
+  `docker exec development-easy-openemr-1 vendor/bin/phpunit [-c phpunit-isolated.xml] --filter <Class> --testdox`
+  directly instead.
+- **Always run PHPStan with `--memory-limit=1G`**, scoped to
+  changed files only (`vendor/bin/phpstan analyse --memory-limit=1G <paths>`)
+  — a full-codebase run is flaky/slow in this environment and CLAUDE.md's
+  advice to always run full-codebase doesn't hold up in practice here.
+- A custom PHPStan rule forbids catching bare `\Throwable` unless you
+  immediately rethrow — narrow to the specific exception type instead
+  (see `SqlExtractedDocumentStore`/`DocumentIngestionPipeline` for the
+  pattern).
+- `symfony/mime` is **not installed** in this project —
+  `UploadedFile::getMimeType()` throws. Use PHP's native
+  `mime_content_type()` on the real file path instead (see
+  `CopilotDocumentUploadController`).
+- This session did all testing against the **primary stack**
+  (`development-easy` containers), not a worktree's own stack — a
+  worktree's docker stack hit real disk pressure earlier in the session.
+  Isolated/DB-backed tests don't need worktree isolation; only use
+  `openemr-cmd worktree` machinery when you actually need a second,
+  concurrently-running app instance.
+- The Chrome extension (`claude-in-chrome`) was not connected in this
+  environment. Browser verification was done via a Selenium/Panther
+  script dropped into the bind-mounted `tmp/` dir, per CLAUDE.md's
+  "Browser debugging via Selenium" section — use that pattern if
+  `claude-in-chrome` still isn't available.
+- Two pre-existing test failures are present in every full-suite run
+  and are unrelated to any of this session's work:
+  `CdaValidateDocumentsTest::testValidateDocumentWithCcdaTypeWithInvalidDocument`
+  and `FieldRenderingSnapshotTest` (`edit visit-categories` data set).
+  Don't chase these; confirm they're still the *only* two before
+  concluding something new is a regression.
+
+## Suggested skills for the next session
+
+- Continue using `EnterPlanMode` + `AskUserQuestion` for any
+  architecturally forked decision before writing code — every large
+  piece this session (extraction pipeline, sidebar redesign, tool-loop
+  wiring, Supervisor) went through that flow, and it's caught real
+  design mistakes before they were built (e.g. the citation-granularity
+  issue in Supervisor).
+- `run` skill for driving the live app when `claude-in-chrome` isn't
+  connected.
+- The `eval-*-validator` skills (`.claude/skills/`) whenever touching
+  the eval-gate layer.
+- `grill-me` for any design with multiple real forks that benefits from
+  being interviewed out loud before planning (used once this session for
+  the factually-consistent validator's design).
+
+## Natural next steps, roughly in order
+
+1. Decide evidence-retriever/RAG scope (needs its own planning pass —
+   don't start writing code without it).
+2. Wire `Supervisor` into `CopilotChatController` as the live entry
+   point, replacing `CopilotService` (with the same exhaustive
+   CSRF/ACL/multi-patient-isolation test coverage
+   `CopilotChatControllerTest` already has for the current path).
+3. Once evidence-retriever exists, revisit the Supervisor's system
+   prompt/tool list to add a third `consult_evidence_worker`.
