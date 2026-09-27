@@ -100,3 +100,27 @@ CREATE TABLE `clinical_copilot_extracted_document` (
   KEY `document_id` (`document_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 #EndIf
+
+-- Small clinical-guideline evidence corpus for EvidenceRetrieverWorker's
+-- hybrid RAG (AgentForge2 Core Requirement #3): dense brute-force cosine
+-- search over embedding_json plus a FULLTEXT keyword search, fused via
+-- Reciprocal Rank Fusion, reranked via Voyage. Populated only by
+-- bin/seed-guideline-corpus.php, never at request time -- see that script's
+-- own docblock for the source data and chunking strategy.
+#IfNotTable clinical_copilot_guideline_chunk
+CREATE TABLE `clinical_copilot_guideline_chunk` (
+  `id`              BIGINT(20)    NOT NULL AUTO_INCREMENT,
+  `source_id`       VARCHAR(64)   NOT NULL COMMENT 'stable slug for the source document, e.g. metformin-hcl-label',
+  `source_label`    VARCHAR(255)  NOT NULL COMMENT 'human-readable label, e.g. "Metformin Hydrochloride Tablets -- FDA Label"',
+  `section`         VARCHAR(64)   NOT NULL COMMENT 'e.g. warnings, contraindications, drug_interactions, dosage_and_administration',
+  `chunk_index`     INT UNSIGNED  NOT NULL COMMENT 'ordinal within (source_id, section) -- see chunking strategy in bin/seed-guideline-corpus.php',
+  `chunk_text`      MEDIUMTEXT    NOT NULL,
+  `embedding_json`  MEDIUMTEXT    NOT NULL COMMENT 'JSON array of floats, Voyage embedding of chunk_text',
+  `embedding_model` VARCHAR(64)   NOT NULL COMMENT 'Voyage model name the embedding was produced with, so a model change can be detected/reseeded',
+  `created_at`      DATETIME      NOT NULL,
+  `last_updated`    DATETIME      NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `source_section_chunk` (`source_id`, `section`, `chunk_index`),
+  FULLTEXT KEY `chunk_text_fulltext` (`chunk_text`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+#EndIf

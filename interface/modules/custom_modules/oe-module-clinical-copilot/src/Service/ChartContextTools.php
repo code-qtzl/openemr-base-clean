@@ -15,6 +15,15 @@
  *  2. Every query names its columns explicitly. No SELECT *. Adding a column
  *     to one of these tables must not silently widen what leaves the building.
  *
+ * A third, narrower invariant covers search_guideline_evidence specifically:
+ * it is the one branch here that is NOT patient-scoped -- no `pid` filter
+ * applies to it, and it carries a `query` argument the model itself supplies
+ * (guideline evidence is not this patient's data). It is still routed
+ * through this single audited dispatch point rather than a separate provider
+ * class, so ChartQaWorker/IntakeExtractorWorker/EvidenceRetrieverWorker can
+ * keep sharing one honest return-type union, per their own docblocks'
+ * existing precedent -- see call()'s return type.
+ *
  * Every invocation is written to OpenEMR's audit log under the
  * 'clinical-copilot-tool' event/category, tagged with a correlation id, so
  * each disclosure is attributable to a user, a patient, a timestamp, and the
@@ -33,18 +42,22 @@ use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Logging\EventAuditLogger;
+use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\DefaultGuidelineEvidenceRetriever;
+use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\GuidelineEvidenceRetriever;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cResultRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncounterRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult;
 use Psr\Clock\ClockInterface;
 use RuntimeException;
+use Throwable;
 
 final readonly class ChartContextTools
 {
@@ -65,6 +78,7 @@ final readonly class ChartContextTools
         private string $authProvider,
         private string $correlationId,
         ?ClockInterface $clock = null,
+        private GuidelineEvidenceRetriever $guidelineRetriever = new DefaultGuidelineEvidenceRetriever(),
     ) {
         $this->clock = $clock ?? ServiceContainer::getClock();
     }
@@ -95,18 +109,23 @@ final readonly class ChartContextTools
     }
 
     /**
-     * Dispatch one tool call and audit it.
+     * Dispatch one tool call and audit it. $query is only meaningful for
+     * search_guideline_evidence (the model-supplied search text) -- every
+     * other branch ignores it, and all existing no-arg call sites keep
+     * compiling unchanged since it defaults to null.
      */
     public function call(
-        string $toolName
-    ): A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult|ExtractedDocumentsResult {
+        string $toolName,
+        ?string $query = null,
+    ): A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult|ExtractedDocumentsResult|GuidelineEvidenceResult {
         $result = match ($toolName) {
-            'get_a1c_series'          => $this->a1cSeries(),
-            'get_active_problems'     => $this->activeProblems(),
-            'get_medications'         => $this->medications(),
-            'get_recent_encounters'   => $this->recentEncounters(),
-            'get_extracted_documents' => $this->extractedDocuments(),
-            default                   => $this->rejectUnknownTool($toolName),
+            'get_a1c_series'            => $this->a1cSeries(),
+            'get_active_problems'       => $this->activeProblems(),
+            'get_medications'           => $this->medications(),
+            'get_recent_encounters'     => $this->recentEncounters(),
+            'get_extracted_documents'   => $this->extractedDocuments(),
+            'search_guideline_evidence' => $this->searchGuidelineEvidence($query ?? ''),
+            default                     => $this->rejectUnknownTool($toolName),
         };
 
         $this->audit(
@@ -395,11 +414,30 @@ final readonly class ChartContextTools
     }
 
     /**
+     * search_guideline_evidence's dispatch branch -- see class docblock's
+     * third invariant. Delegates the actual hybrid retrieval to the injected
+     * GuidelineEvidenceRetriever and degrades to a failed() result on any
+     * retrieval failure (missing API key, DB failure, Voyage API failure),
+     * matching every other branch's failure handling rather than letting an
+     * external-service outage crash the whole turn.
+     */
+    private function searchGuidelineEvidence(string $query): GuidelineEvidenceResult
+    {
+        try {
+            return $this->guidelineRetriever->retrieve($query, $this->correlationId);
+        } catch (RuntimeException $e) {
+            $this->logToolFailure('search_guideline_evidence', $e);
+
+            return GuidelineEvidenceResult::failed('Could not retrieve guideline evidence.');
+        }
+    }
+
+    /**
      * Log a query failure (the exception can carry SQL detail, so it goes to
      * PSR-3 context and never further) so callers can return their own
      * failed() DTO and let the model see only a generic message.
      */
-    private function logToolFailure(string $toolName, SqlQueryException $e): void
+    private function logToolFailure(string $toolName, Throwable $e): void
     {
         ServiceContainer::getLogger()->error('Clinical Co-Pilot tool failed', [
             'correlationId' => $this->correlationId,

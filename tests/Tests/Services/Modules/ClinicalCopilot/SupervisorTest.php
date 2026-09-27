@@ -2,10 +2,12 @@
 
 /**
  * DB-backed integration tests for Supervisor -- AgentForge2 Core
- * Requirement #4's supervisor/worker graph (first pass: ChartQaWorker and
- * IntakeExtractorWorker only). Mirrors CopilotServiceTest's exact
- * scripted-Anthropic-factory approach: only the LLM call is faked,
- * ChartContextTools and the DB it queries are real.
+ * Requirement #4's supervisor/worker graph (ChartQaWorker,
+ * IntakeExtractorWorker, EvidenceRetrieverWorker). Mirrors CopilotServiceTest's
+ * exact scripted-Anthropic-factory approach: only the LLM call is faked,
+ * ChartContextTools and the DB it queries are real. The guideline-evidence
+ * tests use a FakeGuidelineEvidenceRetriever instead of a real Voyage call,
+ * so they need no network access and no real API key.
  *
  * The regression-critical test here is
  * truthfulZeroMedicationsClaimIsStillConservativelyRejectedViaChartWorker:
@@ -27,12 +29,17 @@ namespace OpenEMR\Tests\Services\Modules\ClinicalCopilot;
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/require_module.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/FakeAnthropicTransporter.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ScriptedAnthropicClientFactory.php';
+require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/FakeGuidelineEvidenceRetriever.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtureManager.php';
 
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
+use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\GuidelineEvidenceRetriever;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceRow;
 use OpenEMR\Modules\ClinicalCopilot\Service\Supervisor\Supervisor;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
+use OpenEMR\Tests\Fixtures\ClinicalCopilot\FakeGuidelineEvidenceRetriever;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedAnthropicClientFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -340,8 +347,100 @@ final class SupervisorTest extends TestCase
         self::assertContains('submit_answer', $spanNames);
     }
 
-    private function tools(): ChartContextTools
+    /**
+     * Proves consult_evidence_worker's full path: the model's query reaches
+     * the (fake) retriever, its chunks come back wrapped as
+     * search_guideline_evidence, and a guideline-sourced claim citing it
+     * passes verification -- the new worker end to end, with no real Voyage
+     * call or DB row needed.
+     */
+    #[Test]
+    public function claimCitingSearchGuidelineEvidenceViaEvidenceWorkerPasses(): void
     {
-        return new ChartContextTools($this->pid, 'admin', 'admin', 'test-correlation');
+        $retriever = new FakeGuidelineEvidenceRetriever(GuidelineEvidenceResult::ok([
+            new GuidelineEvidenceRow(
+                sourceId: 'metformin-hcl-label',
+                sourceLabel: 'Metformin Hydrochloride Tablets -- FDA Label',
+                section: 'contraindications',
+                chunkId: 'chunk-0',
+                chunkText: 'Contraindicated in patients with severe renal impairment.',
+                rerankScore: '0.9123',
+            ),
+        ]));
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->toolUse('consult_evidence_worker', ['query' => 'metformin renal impairment'])
+            ->submitAnswer([
+                'insufficient_information' => false,
+                'claims' => [[
+                    'text' => 'Metformin is contraindicated in severe renal impairment.',
+                    'citation' => [
+                        'source_type' => 'guideline',
+                        'source_id' => 'search_guideline_evidence',
+                        'page_or_section' => 'contraindications',
+                        'field_or_chunk_id' => 'chunk-0',
+                        'quote_or_value' => 'Contraindicated in patients with severe renal impairment.',
+                    ],
+                ]],
+            ])
+            ->finalText();
+
+        $supervisor = new Supervisor($this->tools($retriever), $factory);
+        $result = $supervisor->ask('Any renal contraindications for metformin?', 'test-correlation-evidence');
+
+        self::assertTrue($result->verificationPassed);
+        self::assertStringContainsString('renal impairment', $result->reply);
+        self::assertContains('search_guideline_evidence', $result->toolsUsed);
+        self::assertNotContains('consult_evidence_worker', $result->toolsUsed);
+        self::assertSame(['metformin renal impairment'], $retriever->queries());
+
+        $spanNames = array_map(static fn ($span) => $span->name, $result->toolCalls);
+        self::assertContains('handoff:consult_evidence_worker', $spanNames);
+    }
+
+    /**
+     * Same failure mode as truthfulZeroMedicationsClaimIsStillConservativelyRejectedViaChartWorker,
+     * for the guideline worker: a claim citing search_guideline_evidence
+     * when retrieval actually returned zero chunks must still be rejected,
+     * regardless of how plausible the quoted text sounds.
+     */
+    #[Test]
+    public function guidelineClaimWithZeroChunksIsStillConservativelyRejected(): void
+    {
+        $retriever = new FakeGuidelineEvidenceRetriever(GuidelineEvidenceResult::ok([]));
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->toolUse('consult_evidence_worker', ['query' => 'a drug with no corpus coverage'])
+            ->submitAnswer([
+                'insufficient_information' => false,
+                'claims' => [[
+                    'text' => 'No known interactions.',
+                    'citation' => [
+                        'source_type' => 'guideline',
+                        'source_id' => 'search_guideline_evidence',
+                        'page_or_section' => 'drug_interactions',
+                        'field_or_chunk_id' => 'chunk-0',
+                        'quote_or_value' => 'No known interactions.',
+                    ],
+                ]],
+            ])
+            ->finalText();
+
+        $supervisor = new Supervisor($this->tools($retriever), $factory);
+        $result = $supervisor->ask('Any interactions for this drug?', 'test-correlation-evidence-zero');
+
+        self::assertFalse($result->verificationPassed);
+        self::assertSame(ResponseVerifier::FALLBACK_REPLY, $result->reply);
+    }
+
+    private function tools(?GuidelineEvidenceRetriever $guidelineRetriever = null): ChartContextTools
+    {
+        return new ChartContextTools(
+            $this->pid,
+            'admin',
+            'admin',
+            'test-correlation',
+            guidelineRetriever: $guidelineRetriever ?? new FakeGuidelineEvidenceRetriever(GuidelineEvidenceResult::ok([])),
+        );
     }
 }

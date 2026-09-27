@@ -177,6 +177,51 @@ final class ClinicalCopilotFixtureManager
         );
     }
 
+    /**
+     * One row DefaultGuidelineEvidenceRetriever reads --
+     * clinical_copilot_guideline_chunk is not patient-scoped (it is a
+     * shared reference corpus), so cleanup is by source_id via
+     * removeGuidelineChunks(), not folded into removeFixtures()'s
+     * per-pid cleanup.
+     *
+     * @param list<float> $embedding
+     */
+    public function seedGuidelineChunk(
+        string $sourceId,
+        string $sourceLabel,
+        string $section,
+        int $chunkIndex,
+        string $chunkText,
+        array $embedding,
+        string $embeddingModel = 'voyage-3-large',
+    ): void {
+        QueryUtils::sqlInsert(
+            'INSERT INTO `clinical_copilot_guideline_chunk`
+                (`source_id`, `source_label`, `section`, `chunk_index`, `chunk_text`, `embedding_json`, `embedding_model`, `created_at`, `last_updated`)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+            [
+                $sourceId,
+                $sourceLabel,
+                $section,
+                $chunkIndex,
+                $chunkText,
+                json_encode($embedding, JSON_THROW_ON_ERROR),
+                $embeddingModel,
+            ],
+        );
+    }
+
+    /** @param list<string> $sourceIds */
+    public function removeGuidelineChunks(array $sourceIds): void
+    {
+        foreach ($sourceIds as $sourceId) {
+            QueryUtils::sqlStatementThrowException(
+                'DELETE FROM `clinical_copilot_guideline_chunk` WHERE `source_id` = ?',
+                [$sourceId],
+            );
+        }
+    }
+
     /** One recent-encounter row ChartContextTools::recentEncounters() reads. */
     public function seedEncounter(
         int $pid,

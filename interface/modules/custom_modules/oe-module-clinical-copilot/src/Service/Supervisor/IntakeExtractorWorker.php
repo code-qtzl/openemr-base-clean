@@ -24,6 +24,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult;
 
@@ -43,7 +44,7 @@ final readonly class IntakeExtractorWorker
      * ChartContextTools::call()'s full union rather than narrowed with an
      * inline @var cast.
      *
-     * @return array<string, A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult|ExtractedDocumentsResult>
+     * @return array<string, A1cSeriesResult|ActiveProblemsResult|MedicationsResult|RecentEncountersResult|ExtractedDocumentsResult|GuidelineEvidenceResult>
      */
     public function consult(): array
     {

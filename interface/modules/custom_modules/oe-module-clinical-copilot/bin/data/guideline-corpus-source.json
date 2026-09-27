@@ -1,0 +1,55 @@
+{
+    "$comment": "Static, one-time-fetched-and-reviewed snapshot of openFDA structured product label (SPL) sections for a small set of drugs relevant to this project's target user (Dr. Ruiz, a primary-care physician managing diabetic patients -- see USERS.md UC3). Sourced from api.fda.gov/drug/label.json, a free US-government/public-domain data source, not a copyrighted commercial guideline (ADA Standards of Care, UpToDate, Lexicomp are deliberately NOT used here). Fetched and reviewed on 2026-09-27. This is a static snapshot, not a live sync -- see bin/seed-guideline-corpus.php's own docblock for why.",
+    "documents": [
+        {
+            "source_id": "metformin-hcl-label",
+            "source_label": "Metformin Hydrochloride Tablets -- FDA Label",
+            "sections": {
+                "contraindications": "Metformin hydrochloride is contraindicated in patients with severe renal impairment (eGFR below 30 mL/min/1.73 m^2), known hypersensitivity to metformin, and acute or chronic metabolic acidosis, including diabetic ketoacidosis.",
+                "warnings": "Lactic acidosis is a rare but serious metabolic complication that can occur due to metformin accumulation; postmarketing cases have resulted in death, hypothermia, and hypotension. Approximately 7% of patients on metformin show a decrease to subnormal vitamin B12 levels. Concomitant use with insulin or insulin secretagogues increases the risk of hypoglycemia.",
+                "drug_interactions": "Carbonic anhydrase inhibitors (e.g. topiramate) may increase the risk of lactic acidosis by decreasing serum bicarbonate. Drugs that reduce metformin's clearance may increase its accumulation. Alcohol potentiates the effect of metformin on lactate metabolism and should be avoided.",
+                "dosage_and_administration": "Adult starting dose is 500 mg orally twice a day or 850 mg once a day, with meals, with a maximum dose of 2550 mg per day given in divided doses. Pediatric starting dose is 500 mg orally twice a day, up to a maximum of 2000 mg per day."
+            }
+        },
+        {
+            "source_id": "glipizide-label",
+            "source_label": "Glipizide Tablets -- FDA Label",
+            "sections": {
+                "contraindications": "Glipizide is contraindicated in patients with known hypersensitivity to the drug, and in patients with type 1 diabetes mellitus or diabetic ketoacidosis, with or without coma.",
+                "warnings": "Oral hypoglycemic drugs have been associated with increased cardiovascular mortality compared to diet alone or diet plus insulin, based on findings from the University Group Diabetes Program (UGDP) study.",
+                "drug_interactions": "The hypoglycemic effects of glipizide may be enhanced by NSAIDs, azole antifungals, salicylates, sulfonamides, and beta-blockers -- fluconazole specifically increases glipizide AUC by 56.9%. Thiazides, corticosteroids, and estrogens may cause a loss of glycemic control when co-administered.",
+                "dosage_and_administration": "Initial dose is 5 mg before breakfast, with adjustments made in 2.5-5 mg increments. Maximum once-daily dose is 15 mg; maximum total daily dose is 40 mg. Administer approximately 30 minutes before a meal."
+            }
+        },
+        {
+            "source_id": "insulin-glargine-label",
+            "source_label": "Insulin Glargine Injection -- FDA Label",
+            "sections": {
+                "contraindications": "Insulin glargine is contraindicated during episodes of hypoglycemia and in patients with hypersensitivity to insulin glargine or any of its excipients.",
+                "warnings": "Never share an insulin glargine prefilled pen between patients, even if the needle is changed. Regimen changes carry a risk of hyperglycemia or hypoglycemia; other concerns include medication errors, hypersensitivity reactions, hypokalemia, and fluid retention when co-administered with thiazolidinediones.",
+                "drug_interactions": "Drugs that increase hypoglycemia risk include other antidiabetic agents, ACE inhibitors, and fibrates. Drugs that decrease the glucose-lowering effect include corticosteroids, diuretics, and sympathomimetic agents. Beta-blockers and alcohol may increase or decrease the glucose-lowering effect and can blunt the symptoms of hypoglycemia.",
+                "dosage_and_administration": "Administer subcutaneously once daily at any time of day, but at the same time every day. Rotate injection sites within the abdominal area, thigh, or deltoid region. Do not dilute or mix with any other insulin or solution."
+            }
+        },
+        {
+            "source_id": "empagliflozin-label",
+            "source_label": "Empagliflozin Tablets -- FDA Label",
+            "sections": {
+                "contraindications": "Empagliflozin is contraindicated in patients with hypersensitivity to empagliflozin or any of its excipients, and in patients on dialysis.",
+                "warnings": "Assess patients presenting with signs and symptoms of metabolic acidosis for ketoacidosis, regardless of blood glucose level. Assess volume status and renal function before initiating therapy, given the risk of volume depletion. Additional warnings cover urosepsis, pyelonephritis, increased hypoglycemia risk with insulin or insulin secretagogues, necrotizing fasciitis of the perineum, genital mycotic infections, and hypersensitivity reactions.",
+                "drug_interactions": "Diuretics increase the risk of volume depletion. Insulin and insulin secretagogues increase hypoglycemia risk. Lithium serum concentrations may decrease with concomitant use. As an SGLT2 inhibitor, empagliflozin increases urinary glucose excretion and will lead to positive urine glucose test results.",
+                "dosage_and_administration": "Recommended starting dose is 10 mg once daily in the morning, taken with or without food. For patients tolerating the drug who need additional glycemic control, the dose may be increased to 25 mg once daily."
+            }
+        },
+        {
+            "source_id": "semaglutide-label",
+            "source_label": "Semaglutide Injection -- FDA Label",
+            "sections": {
+                "contraindications": "Semaglutide is contraindicated in patients with a personal or family history of medullary thyroid carcinoma (MTC) or in patients with Multiple Endocrine Neoplasia syndrome type 2 (MEN 2), and in patients with serious hypersensitivity to semaglutide or any of its excipients.",
+                "warnings": "Semaglutide causes thyroid C-cell tumors in rodents; the human relevance is unknown. Additional warnings cover acute pancreatitis, diabetic retinopathy complications, increased hypoglycemia risk with insulin or insulin secretagogues, acute kidney injury, severe gastrointestinal reactions, and hypersensitivity reactions.",
+                "drug_interactions": "Semaglutide stimulates insulin release in the presence of elevated blood glucose. Patients receiving semaglutide in combination with an insulin secretagogue (e.g. a sulfonylurea) or insulin may have an increased risk of hypoglycemia.",
+                "dosage_and_administration": "Administer once weekly at any time of day, with or without meals. Start at 0.25 mg once weekly, increasing to 0.5 mg after 4 weeks. Inject subcutaneously in the abdomen, thigh, or upper arm."
+            }
+        }
+    ]
+}

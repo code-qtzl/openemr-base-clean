@@ -149,6 +149,25 @@ prescriptions can't support a safety check either. Renal-function context
 concrete justification for adding one in Stage 5, not a hypothetical
 "more tools would be nice."
 
+The cross-check is also incomplete without label-level safety context, a
+second, separate gap from the eGFR one above: this use case's own worked
+example — a condition that "would make me reconsider adjusting their
+diabetes regimen" — is precisely a `contraindications`/`drug_interactions`/
+`warnings` fact that lives in the drug's own FDA label, not in this
+patient's chart. `get_active_problems` and `get_medications` can tell Dr.
+Ruiz *what* the patient has and takes; neither can tell her whether a given
+adjustment is contraindicated for a patient with that condition — that
+answer lives in guideline/label text, external to the chart by definition.
+`search_guideline_evidence` (via `EvidenceRetrieverWorker`, hybrid
+sparse+dense retrieval over a small FDA drug-label corpus) is the concrete
+tool this gap calls for, so a UC3 answer can cite label guidance (e.g.
+"metformin is contraindicated in severe renal impairment, per its label")
+alongside chart data, rather than only restating the chart's two lists next
+to each other and leaving the cross-reference to her. This supplements,
+not replaces, the eGFR/renal-function chart-data gap above — that gap is
+about a missing *lab value*; this one is about missing *label guidance*,
+and closing one does not close the other.
+
 ### UC4 — End-of-encounter gut-check: "did I miss anything"
 
 **Trigger:** just before closing the visit and moving to the next room —
@@ -181,8 +200,9 @@ eval suite (a required deliverable, not built yet).
 `ARCHITECTURE.md` should treat UC1 and UC4 as buildable now, contingent on
 the `get_medications` fix; UC2 as requiring conversation-state design
 before anything else in this document can safely expand; and UC3 as the
-concrete driver for the next tool this system needs (renal function /
-eGFR), not a speculative addition. No use case in this document requires
+concrete driver for two further tools this system needs — renal function /
+eGFR (chart data) and `search_guideline_evidence` (label/guideline
+evidence) — not a speculative addition. No use case in this document requires
 schedule-wide or cross-patient capability — the co-pilot's existing
 single-patient-scoped architecture (patient id fixed server-side, per
 `AUDIT.md`'s Security Audit) is the right shape for this user and should
