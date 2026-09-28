@@ -99,7 +99,7 @@ final class CopilotChatControllerTest extends TestCase
 
     /**
      * Failure mode guarded against: an oversized question (>2000 chars)
-     * must be rejected before any CopilotService/ChartContextTools/Anthropic
+     * must be rejected before any Supervisor/ChartContextTools/Anthropic
      * work happens -- proven here by asserting no clinical_copilot_log row
      * was written, not just by the status code.
      */
@@ -239,7 +239,7 @@ final class CopilotChatControllerTest extends TestCase
     }
 
     /**
-     * Failure mode guarded against: any exception from CopilotService::ask()
+     * Failure mode guarded against: any exception from Supervisor::ask()
      * -- here, a real RuntimeException('Clinical Co-Pilot is not
      * configured.') from a missing API key -- must degrade to a generic
      * browser-facing message, never the exception's own text (which could
@@ -360,7 +360,7 @@ final class CopilotChatControllerTest extends TestCase
         $token = $this->csrfToken();
 
         $factory = (new ScriptedAnthropicClientFactory())
-            ->toolUse('get_recent_encounters')
+            ->toolUse('consult_chart_worker')
             ->submitAnswer([
                 'insufficient_information' => false,
                 'claims' => [[
@@ -413,7 +413,7 @@ final class CopilotChatControllerTest extends TestCase
         $token = $this->csrfToken();
 
         $factory = (new ScriptedAnthropicClientFactory())
-            ->toolUse('get_active_problems')
+            ->toolUse('consult_chart_worker')
             ->submitAnswer([
                 'insufficient_information' => false,
                 'claims' => [[

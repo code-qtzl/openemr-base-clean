@@ -14,9 +14,10 @@
  * changes to trace this class, since they already iterate
  * AskResult::toolCalls generically.
  *
- * Not wired into CopilotChatController yet -- this is the standalone
- * capability, fully tested; swapping it in as the controller's live entry
- * point (replacing CopilotService) is the natural next step, matching how
+ * This is now CopilotChatController's live entry point, replacing
+ * CopilotService (which remains intact -- see its own docblock -- for
+ * apiKey()/model() and its independent CopilotServiceTest.php coverage).
+ * Was built and tested standalone first, then wired in, matching how
  * DocumentIngestionPipeline and get_extracted_documents were each built
  * and tested standalone before their own live wiring.
  *

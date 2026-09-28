@@ -60,6 +60,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use OpenEMR\Modules\ClinicalCopilot\Service\SessionRateLimiter;
+use OpenEMR\Modules\ClinicalCopilot\Service\Supervisor\Supervisor;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -139,7 +140,7 @@ final readonly class CopilotChatController
                 ? $this->conversationStore->load($sessionUuid, $patientId)
                 : new Conversation();
 
-            $result = (new CopilotService($tools, $this->clientFactory))->ask($question, $correlationId, $history);
+            $result = (new Supervisor($tools, $this->clientFactory))->ask($question, $correlationId, $history);
             $endedAt = microtime(true);
 
             $this->tracer->traceAsk(

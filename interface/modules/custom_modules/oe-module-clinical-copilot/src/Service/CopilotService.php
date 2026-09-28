@@ -22,6 +22,14 @@
  * never calls it, the empty capture fails ResponseVerifier closed to the
  * same safe fallback as a rejected answer.
  *
+ * NOT the live chat entry point anymore -- CopilotChatController calls
+ * Supervisor::ask() instead (its three-worker graph over the same
+ * ChartContextTools), which itself calls back into this class's apiKey()/
+ * model() statics rather than duplicating them. This class remains fully
+ * intact and independently tested (CopilotServiceTest.php exercises it
+ * directly), not dead code: CopilotPanelController and
+ * DocumentExtractionService also use its statics independently of chat.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
