@@ -220,6 +220,24 @@ final class CitationGoldenSet
                 expectedCitationPresent: true,
                 tags: ['positive', 'guideline', 'multi_claim'],
             ),
+            new CitationGoldenSetCase(
+                id: 'single-whitespace-only-field-fails',
+                description: 'A citation with four fields correctly populated but field_or_chunk_id containing only whitespace.',
+                claims: [
+                    [
+                        'claim' => "The patient's A1C is 7.2%.",
+                        'citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'lab-001',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => '   ',
+                            'quote_or_value' => '7.2%',
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: false,
+                tags: ['negative', 'whitespace_boundary'],
+            ),
         ];
     }
 }

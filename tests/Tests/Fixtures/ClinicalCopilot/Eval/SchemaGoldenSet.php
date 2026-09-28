@@ -191,6 +191,29 @@ final class SchemaGoldenSet
                 expectedSchemaValid: false,
                 tags: ['negative', 'lab_pdf', 'empty_object'],
             ),
+            new SchemaGoldenSetCase(
+                id: 'intake-form-list-field-wrong-shape-fails',
+                description: 'An intake_form where current_medications is a string instead of a list.',
+                document: [
+                    'doc_type' => 'intake_form',
+                    'fields' => [
+                        'demographics' => ['age' => 61, 'sex' => 'M'],
+                        'chief_concern' => 'Medication review.',
+                        'current_medications' => 'metformin 500mg twice daily',
+                        'allergies' => [],
+                        'family_history' => 'Father: hypertension.',
+                        'source_citation' => [
+                            'source_type' => 'intake_form',
+                            'source_id' => 'intake-2026-03-01',
+                            'page_or_section' => 'medications',
+                            'field_or_chunk_id' => 'current_medications',
+                            'quote_or_value' => 'metformin 500mg twice daily',
+                        ],
+                    ],
+                ],
+                expectedSchemaValid: false,
+                tags: ['negative', 'intake_form', 'wrong_shape'],
+            ),
         ];
     }
 }

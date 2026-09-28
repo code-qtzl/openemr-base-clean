@@ -6,11 +6,13 @@ where a rubric category can be validated structurally. Each eval category is
 its own subdirectory here, paired with a golden set and an isolated PHPUnit
 test so a regression is caught automatically on every PR.
 
-None of these are wired into `CopilotChatController`/`CopilotService`'s live
-request path yet -- they are eval-gate tooling only (golden set + PHPUnit),
-matching AgentForge2 Core Requirement #6's framing ("a 50-case golden set and
-a PR-blocking Git Hook"). Wiring a live response through these validators is
-a separate, later integration decision.
+None of these are wired into `CopilotChatController`/`Supervisor`'s live
+request path yet -- they are eval-gate tooling only (golden set + PHPUnit).
+The golden set totals exactly 50 cases across the 5 categories below, and
+`bin/eval-gate.php` (see "PR-blocking eval gate" further down) is the actual
+PR-blocking implementation of AgentForge2 Core Requirement #6's "a 50-case
+golden set and a PR-blocking Git Hook." Wiring a live response through these
+validators is a separate, later integration decision.
 
 | Category | Status |
 |---|---|
@@ -38,10 +40,10 @@ Production code (`interface/modules/custom_modules/oe-module-clinical-copilot/sr
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
 6. `CitationGoldenSetCase.php` — golden-set case DTO
-7. `CitationGoldenSet.php` — the 8 golden-set cases
+7. `CitationGoldenSet.php` — the 12 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/Citation/`):
-8. `CitationValidatorTest.php` — 14 tests
+8. `CitationValidatorTest.php` — 18 tests
 
 ## `schema_valid`
 
@@ -66,10 +68,10 @@ Production code (`.../Service/Eval/Schema/`):
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
 7. `SchemaGoldenSetCase.php` — golden-set case DTO
-8. `SchemaGoldenSet.php` — the 8 golden-set cases
+8. `SchemaGoldenSet.php` — the 9 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/Schema/`):
-9. `SchemaValidatorTest.php` — 13 tests
+9. `SchemaValidatorTest.php` — 14 tests
 
 ## `factually_consistent`
 
@@ -92,10 +94,10 @@ Production code (`.../Service/Eval/FactualConsistency/`):
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
 5. `FactualConsistencyGoldenSetCase.php` — golden-set case DTO
-6. `FactualConsistencyGoldenSet.php` — the 8 golden-set cases
+6. `FactualConsistencyGoldenSet.php` — the 9 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/FactualConsistency/`):
-7. `FactualConsistencyValidatorTest.php` — 15 tests
+7. `FactualConsistencyValidatorTest.php` — 16 tests
 
 ## `safe_refusal`
 
@@ -116,10 +118,10 @@ Production code (`.../Service/Eval/SafeRefusal/`):
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
 6. `SafeRefusalGoldenSetCase.php` — golden-set case DTO
-7. `SafeRefusalGoldenSet.php` — the 8 golden-set cases
+7. `SafeRefusalGoldenSet.php` — the 12 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/SafeRefusal/`):
-8. `SafeRefusalValidatorTest.php` — 13 tests
+8. `SafeRefusalValidatorTest.php` — 17 tests
 
 ## `no_phi_in_logs`
 
@@ -141,10 +143,36 @@ Production code (`.../Service/Eval/PhiLogGuard/`):
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
 5. `PhiLogGuardGoldenSetCase.php` — golden-set case DTO
-6. `PhiLogGuardGoldenSet.php` — the 7 golden-set cases
+6. `PhiLogGuardGoldenSet.php` — the 8 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/PhiLogGuard/`):
-7. `PhiLogGuardValidatorTest.php` — 13 tests
+7. `PhiLogGuardValidatorTest.php` — 14 tests
+
+## PR-blocking eval gate
+
+`interface/modules/custom_modules/oe-module-clinical-copilot/bin/eval-gate.php`
+(composer script: `composer eval-gate`) is the actual implementation of
+AgentForge2 Core Requirement #6's "PR-blocking Git Hook." It runs the 5
+`*ValidatorTest` classes above with `--log-junit`, parses the result, and
+computes a pass rate per category scoped to only the `testGoldenSetCase`
+data-provider tests (the fixed contract-shape/unit tests in each class don't
+count toward this score). That pass rate is compared against
+`bin/data/eval-gate-baseline.json`:
+
+- `no_phi_in_logs` is zero-tolerance -- any single failing case fails the
+  gate outright, regardless of aggregate pass rate. A PHI disclosure is not
+  a quality regression to average away.
+- Every other category fails if it regresses by more than
+  `regression_threshold_points` (0.05) versus its baseline, or drops below
+  the baseline entirely -- which for these deterministic validators (pure
+  functions over hand-verified golden fixtures, not live model output) means
+  a floor of 100%: a failure here is always a real regression or a bad
+  fixture, never natural variance.
+
+Wired into `.github/workflows/eval-gate.yml`, triggered on push/PR to `main`.
+Update `bin/data/eval-gate-baseline.json` only in the same PR that
+intentionally changes golden-set composition -- never as a routine "it went
+green" step, which would defeat the regression check.
 
 ## How to test locally
 

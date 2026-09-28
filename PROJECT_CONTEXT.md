@@ -55,10 +55,16 @@ mitigation for this constraint, not incidental features.
 **What will be released, today:** the deployed app
 (`https://openemr-production-a819.up.railway.app`) is public — that is a
 hard requirement of the case study this fork was built for. **The source
-code is not.** This repo's only remote is a private, self-hosted GitLab
-instance (`labs.gauntletai.com`); there is no public GitHub mirror. So the
-honest current answer to "what will you release" is: a live demo with
-synthetic data, and no published source.
+code is not, yet.** This repo's primary remote is now a private GitHub
+repository (`github.com/code-qtzl/openemr-base-clean`, `origin`) — migrated
+here from the original self-hosted GitLab instance (`labs.gauntletai.com`,
+still present as the `gitlab` remote but no longer pushed to) specifically
+so real CI (branch protection, the eval-gate PR check, etc.) could run
+against it. So the honest current answer to "what will you release" is: a
+live demo with synthetic data, and no published source while the GitHub
+repo stays private -- flipping it to public (a plain visibility toggle, not
+a platform migration) is the only remaining step if/when the source itself
+is released.
 
 **Licensing:** already settled by inheritance, not a new decision. This is
 a fork of OpenEMR, licensed GPLv3 (`LICENSE`, repo root). The Clinical

@@ -1,0 +1,12 @@
+{
+    "$comment": "Checked-in baseline for bin/eval-gate.php. Update only in the same PR that intentionally changes golden-set composition -- never auto-written by the gate script itself, since a script that rewrites its own baseline on every green run makes the regression check meaningless.",
+    "regression_threshold_points": 0.05,
+    "zero_tolerance_categories": ["no_phi_in_logs"],
+    "categories": {
+        "citation_present": 1.0,
+        "schema_valid": 1.0,
+        "factually_consistent": 1.0,
+        "safe_refusal": 1.0,
+        "no_phi_in_logs": 1.0
+    }
+}

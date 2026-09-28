@@ -1,0 +1,26 @@
+name: Clinical Co-Pilot Eval Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.event.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  eval-gate:
+    name: Eval Gate (schema_valid, citation_present, factually_consistent, safe_refusal, no_phi_in_logs)
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup PHP and Composer
+      uses: ./.github/actions/setup-php-composer
+      with:
+        php-version: '8.2'
+
+    - name: Run eval gate
+      run: composer eval-gate

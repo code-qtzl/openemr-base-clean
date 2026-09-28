@@ -197,6 +197,25 @@ final class FactualConsistencyGoldenSet
                 expectedFactuallyConsistent: false,
                 tags: ['negative', 'batch'],
             ),
+            new FactualConsistencyGoldenSetCase(
+                id: 'percent-sign-omitted-still-matches',
+                description: 'Asserted value omits the percent sign the citation quote includes, but the numeric value still matches.',
+                claims: [
+                    [
+                        'claim' => "The patient's A1C is 7.2.",
+                        'asserted_value' => '7.2',
+                        'citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'lab-004',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'a1c',
+                            'quote_or_value' => '7.2%',
+                        ],
+                    ],
+                ],
+                expectedFactuallyConsistent: true,
+                tags: ['positive', 'numeric', 'formatting_boundary'],
+            ),
         ];
     }
 }

@@ -129,6 +129,19 @@ final class PhiLogGuardGoldenSet
                 expectedNoPhiInLogs: true,
                 tags: ['positive', 'redacted'],
             ),
+            new PhiLogGuardGoldenSetCase(
+                id: 'ssn-shaped-value-in-generic-field',
+                description: 'A trace field with a generic name (not on the identifier denylist) whose value matches an SSN-shaped pattern.',
+                emission: [
+                    'log_target' => 'langfuse_trace',
+                    'payload' => [
+                        'correlation_id' => 'c-128',
+                        'note' => 'Verified against 123-45-6789 on file.',
+                    ],
+                ],
+                expectedNoPhiInLogs: false,
+                tags: ['negative', 'value_pattern', 'ssn'],
+            ),
         ];
     }
 }
