@@ -89,6 +89,9 @@ services:
       # LangfuseCheck both no-op until both keys are set. Same .env as above.
       OPENEMR__LANGFUSE_PUBLIC_KEY: "${OPENEMR__LANGFUSE_PUBLIC_KEY:-}"
       OPENEMR__LANGFUSE_SECRET_KEY: "${OPENEMR__LANGFUSE_SECRET_KEY:-}"
+      # EvidenceRetrieverWorker's hybrid RAG (bin/seed-guideline-corpus.php,
+      # DefaultGuidelineEvidenceRetriever): embeddings + rerank. Same .env as above.
+      OPENEMR__VOYAGE_API_KEY: "${OPENEMR__VOYAGE_API_KEY:-}"
       # Load testing only (PUNCH_LIST.md 3.2, tests/loadtest/): the Anthropic PHP
       # SDK reads this directly (vendor/anthropic-ai/sdk/src/Client.php) when no
       # explicit baseUrl is passed, so setting it in .env redirects the real

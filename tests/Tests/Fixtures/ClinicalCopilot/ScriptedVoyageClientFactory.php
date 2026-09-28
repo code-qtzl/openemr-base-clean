@@ -38,7 +38,11 @@ final class ScriptedVoyageClientFactory implements VoyageClientFactory
     {
         $this->lastTransporter = new FakeVoyageTransporter($this->embedResponses, $this->rerankResponses);
 
-        return new VoyageClient($this->lastTransporter, $apiKey, $correlationId);
+        // No-op sleep: none of these fakes ever return 429, but this keeps
+        // it that way even if a future test scripts one, rather than a real
+        // test run silently blocking for real retry-delay seconds.
+        return new VoyageClient($this->lastTransporter, $apiKey, $correlationId, static function (int $seconds): void {
+        });
     }
 
     public function lastTransporter(): ?FakeVoyageTransporter

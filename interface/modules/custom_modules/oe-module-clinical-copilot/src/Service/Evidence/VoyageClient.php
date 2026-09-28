@@ -17,6 +17,7 @@ declare(strict_types=1);
 
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Evidence;
 
+use Closure;
 use GuzzleHttp\Psr7\Request;
 use JsonException;
 use Psr\Http\Client\ClientExceptionInterface;
@@ -35,10 +36,33 @@ final readonly class VoyageClient
     private const EMBED_MODEL = 'voyage-3-large';
     private const RERANK_MODEL = 'rerank-2';
 
+    /**
+     * An account with no payment method on file is rate-limited to 3 RPM
+     * (confirmed against the real API's 429 response body, which names this
+     * exact limit and points to the billing page to lift it) -- retry on 429
+     * rather than fail outright, so a small seed run still completes on the
+     * default tier. 21s safely clears "3 per rolling minute"; 5 attempts
+     * covers a couple of neighboring calls colliding on the same window
+     * without retrying forever.
+     */
+    private const RATE_LIMIT_RETRY_DELAY_SECONDS = 21;
+    private const MAX_ATTEMPTS = 5;
+
+    /**
+     * @param Closure(int): void|null $sleep Defaults to a real sleep().
+     *                                       Tests inject a no-op so
+     *                                       retry-path assertions don't take
+     *                                       (attempts x 21s) of real
+     *                                       wall-clock time. Typed as
+     *                                       Closure, not callable -- PHP
+     *                                       does not allow `callable` as a
+     *                                       property type.
+     */
     public function __construct(
         private ClientInterface $http,
         private string $apiKey,
         private string $correlationId,
+        private ?Closure $sleep = null,
     ) {
     }
 
@@ -135,38 +159,64 @@ final readonly class VoyageClient
             throw new RuntimeException('Failed to encode Voyage API request body.', previous: $e);
         }
 
-        $request = new Request(
-            'POST',
-            self::BASE_URI . $path,
-            [
-                'Authorization' => "Bearer {$this->apiKey}",
-                'Content-Type' => 'application/json',
-                VoyageClientFactory::CORRELATION_HEADER => $this->correlationId,
-            ],
-            $encoded,
-        );
+        for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; ++$attempt) {
+            $request = new Request(
+                'POST',
+                self::BASE_URI . $path,
+                [
+                    'Authorization' => "Bearer {$this->apiKey}",
+                    'Content-Type' => 'application/json',
+                    VoyageClientFactory::CORRELATION_HEADER => $this->correlationId,
+                ],
+                $encoded,
+            );
 
-        try {
-            $response = $this->http->sendRequest($request);
-        } catch (ClientExceptionInterface $e) {
-            throw new RuntimeException(sprintf('Voyage API request to %s failed.', $path), previous: $e);
+            try {
+                $response = $this->http->sendRequest($request);
+            } catch (ClientExceptionInterface $e) {
+                throw new RuntimeException(sprintf('Voyage API request to %s failed.', $path), previous: $e);
+            }
+
+            $status = $response->getStatusCode();
+
+            if ($status === 429 && $attempt < self::MAX_ATTEMPTS) {
+                $this->sleep(self::RATE_LIMIT_RETRY_DELAY_SECONDS);
+                continue;
+            }
+
+            $raw = (string) $response->getBody();
+
+            try {
+                $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+            } catch (JsonException $e) {
+                throw new RuntimeException(sprintf('Voyage API response from %s was not valid JSON.', $path), previous: $e);
+            }
+
+            if ($status >= 400 || !is_array($decoded)) {
+                throw new RuntimeException(sprintf('Voyage API request to %s failed with status %d.', $path, $status));
+            }
+
+            /** @var array<string, mixed> $decoded */
+            return $decoded;
         }
 
-        $status = $response->getStatusCode();
-        $raw = (string) $response->getBody();
+        // @codeCoverageIgnoreStart Unreachable: the loop above always
+        // returns or throws on its final iteration (attempt === MAX_ATTEMPTS
+        // never re-enters the 429-retry branch), so this only exists to
+        // satisfy PHPStan's return-type analysis of the for loop.
+        throw new RuntimeException(sprintf('Voyage API request to %s exhausted all retries.', $path));
+        // @codeCoverageIgnoreEnd
+    }
 
-        try {
-            $decoded = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
-            throw new RuntimeException(sprintf('Voyage API response from %s was not valid JSON.', $path), previous: $e);
+    private function sleep(int $seconds): void
+    {
+        if ($this->sleep !== null) {
+            ($this->sleep)($seconds);
+
+            return;
         }
 
-        if ($status >= 400 || !is_array($decoded)) {
-            throw new RuntimeException(sprintf('Voyage API request to %s failed with status %d.', $path, $status));
-        }
-
-        /** @var array<string, mixed> $decoded */
-        return $decoded;
+        sleep($seconds);
     }
 
     private static function floatFromMixed(mixed $value): float

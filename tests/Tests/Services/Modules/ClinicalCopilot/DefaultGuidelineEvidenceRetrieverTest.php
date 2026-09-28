@@ -22,6 +22,7 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/FakeVoyageTransporter
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ScriptedVoyageClientFactory.php';
 require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtureManager.php';
 
+use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\DefaultGuidelineEvidenceRetriever;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceRow;
@@ -109,16 +110,60 @@ final class DefaultGuidelineEvidenceRetrieverTest extends TestCase
         self::assertSame('0.9300', $row->rerankScore);
     }
 
+    /**
+     * The corpus is genuinely populated in shared dev environments now (see
+     * bin/seed-guideline-corpus.php), so this test cannot just assume the
+     * table starts empty -- it snapshots whatever is really there, empties
+     * the table for the duration of the assertion, and restores the
+     * snapshot in a finally block so a real seeded corpus is never lost,
+     * even if the assertion itself fails.
+     */
     #[Test]
     public function emptyCorpusReturnsAnEmptyOkResultWithoutCallingVoyage(): void
     {
-        $factory = new ScriptedVoyageClientFactory(embedResponses: [], rerankResponses: []);
+        $snapshot = QueryUtils::fetchRecords(
+            'SELECT `source_id`, `source_label`, `section`, `chunk_index`, `chunk_text`, `embedding_json`, `embedding_model`
+               FROM `clinical_copilot_guideline_chunk`'
+        );
+        QueryUtils::sqlStatementThrowException('DELETE FROM `clinical_copilot_guideline_chunk`');
 
-        $retriever = new DefaultGuidelineEvidenceRetriever($factory);
-        $result = $retriever->retrieve('anything', 'test-correlation-empty-corpus');
+        try {
+            $factory = new ScriptedVoyageClientFactory(embedResponses: [], rerankResponses: []);
 
-        self::assertTrue($result->ok);
-        self::assertSame([], $result->rows);
+            $retriever = new DefaultGuidelineEvidenceRetriever($factory);
+            $result = $retriever->retrieve('anything', 'test-correlation-empty-corpus');
+
+            self::assertTrue($result->ok);
+            self::assertSame([], $result->rows);
+        } finally {
+            foreach ($snapshot as $row) {
+                $embeddingJson = $row['embedding_json'] ?? null;
+                $decoded = is_string($embeddingJson) ? json_decode($embeddingJson, true, flags: JSON_THROW_ON_ERROR) : [];
+                $embedding = is_array($decoded)
+                    ? array_values(array_map(static fn (mixed $v): float => is_numeric($v) ? (float) $v : 0.0, $decoded))
+                    : [];
+
+                $this->fixtures->seedGuidelineChunk(
+                    self::stringFromMixed($row['source_id'] ?? null),
+                    self::stringFromMixed($row['source_label'] ?? null),
+                    self::stringFromMixed($row['section'] ?? null),
+                    self::intFromMixed($row['chunk_index'] ?? null),
+                    self::stringFromMixed($row['chunk_text'] ?? null),
+                    $embedding,
+                    self::stringFromMixed($row['embedding_model'] ?? null),
+                );
+            }
+        }
+    }
+
+    private static function stringFromMixed(mixed $value): string
+    {
+        return is_string($value) ? $value : '';
+    }
+
+    private static function intFromMixed(mixed $value): int
+    {
+        return is_int($value) || (is_string($value) && is_numeric($value)) ? (int) $value : 0;
     }
 
     #[Test]
