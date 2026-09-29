@@ -201,9 +201,16 @@ FROM base AS openemr-composer
 COPY --from=openemr-source /openemr /openemr
 WORKDIR /openemr
 # Use Docker buildkit cache mount for Composer cache (requires DOCKER_BUILDKIT=1)
-# id= is required by some builders (e.g. Railway's Railpack) that reject an
-# unnamed cache mount even though it's optional per the BuildKit spec itself.
-RUN --mount=type=cache,id=composer-cache,target=/root/.composer/cache \
+# id= is required by Railway's Railpack builder, and specifically has to be
+# prefixed "s/<railway-service-uuid>-" -- Railway rejects any other id
+# (including an unprefixed one) with "missing the cacheKey prefix from its
+# id". The UUID below is this fork's Railway "openemr" service
+# (discerning-imagination project, production environment) -- not a secret
+# (Railway: "IDs are not sensitive, at all"), but if that service is ever
+# deleted/recreated this needs updating to the new service's UUID, or
+# Railway builds will fail this same validation again. Harmless to any
+# other builder -- BuildKit itself treats the id as an opaque cache key.
+RUN --mount=type=cache,id=s/bfa797b5-260b-47e5-ab99-4eafb77cd927-composer,target=/root/.composer/cache \
     composer install --no-dev --optimize-autoloader \
     && composer dump-autoload --optimize --apcu
 
@@ -214,9 +221,9 @@ COPY --from=openemr-source /openemr /openemr
 WORKDIR /openemr
 RUN apk add --no-cache build-base nodejs npm
 # Use Docker buildkit cache mount for npm cache (requires DOCKER_BUILDKIT=1)
-# id= is required by some builders (e.g. Railway's Railpack) that reject an
-# unnamed cache mount even though it's optional per the BuildKit spec itself.
-RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
+# id= prefix requirement -- see the composer cache mount's comment above for
+# why, and what to update if the Railway service is ever recreated.
+RUN --mount=type=cache,id=s/bfa797b5-260b-47e5-ab99-4eafb77cd927-npm,target=/root/.npm \
     npm install --unsafe-perm \
     && npm run build \
     && cd ccdaservice \
