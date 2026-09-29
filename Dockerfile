@@ -201,7 +201,9 @@ FROM base AS openemr-composer
 COPY --from=openemr-source /openemr /openemr
 WORKDIR /openemr
 # Use Docker buildkit cache mount for Composer cache (requires DOCKER_BUILDKIT=1)
-RUN --mount=type=cache,target=/root/.composer/cache \
+# id= is required by some builders (e.g. Railway's Railpack) that reject an
+# unnamed cache mount even though it's optional per the BuildKit spec itself.
+RUN --mount=type=cache,id=composer-cache,target=/root/.composer/cache \
     composer install --no-dev --optimize-autoloader \
     && composer dump-autoload --optimize --apcu
 
@@ -212,7 +214,9 @@ COPY --from=openemr-source /openemr /openemr
 WORKDIR /openemr
 RUN apk add --no-cache build-base nodejs npm
 # Use Docker buildkit cache mount for npm cache (requires DOCKER_BUILDKIT=1)
-RUN --mount=type=cache,target=/root/.npm \
+# id= is required by some builders (e.g. Railway's Railpack) that reject an
+# unnamed cache mount even though it's optional per the BuildKit spec itself.
+RUN --mount=type=cache,id=npm-cache,target=/root/.npm \
     npm install --unsafe-perm \
     && npm run build \
     && cd ccdaservice \
@@ -308,9 +312,17 @@ RUN cd /tmp \
 # Set working directory to OpenEMR installation
 WORKDIR /var/www/localhost/htdocs/openemr
 
-# Define volumes for SSL certificates and Let's Encrypt certificates
-# These volumes persist certificates across container restarts
-VOLUME [ "/etc/letsencrypt/", "/etc/ssl" ]
+# SSL/Let's Encrypt certs at /etc/letsencrypt and /etc/ssl used to be
+# declared as an image VOLUME here so a plain `docker run` (no explicit
+# volume/bind mount) still got an anonymous volume and certs survived a
+# container recreation. Removed because Railway's builder (Railpack) rejects
+# any VOLUME instruction outright -- persistent storage there has to be a
+# Railway Volume, declared per-service, not baked into the image. A compose
+# target that wants the old persist-across-restarts behavior back needs to
+# declare its own named volume for these two paths explicitly (ssl.sh
+# regenerates a self-signed cert on boot if missing either way, so the
+# practical effect of not doing so is just a new self-signed cert on every
+# container recreation, not a functional break).
 
 # ============================================================================
 # APACHE AND PHP CONFIGURATION FILES
