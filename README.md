@@ -20,6 +20,20 @@
 
 [OpenEMR](https://open-emr.org) is a Free and Open Source electronic health records and medical practice management application. It features fully integrated electronic health records, practice management, scheduling, electronic billing, internationalization, free support, a vibrant community, and a whole lot more. It runs on Windows, Linux, Mac OS X, and many other platforms.
 
+### Clinical Co-Pilot (AgentForge2 Weeks 1–2)
+
+This fork adds a Clinical Co-Pilot: a tool-calling chat agent embedded in the patient demographics page. It is decision support only — every clinical claim must cite a tool call or a stored document, and a verification layer rejects (falls back to a safe default reply) anything that isn't.
+
+- **Week 1 baseline**: a single-agent tool loop over four read-only chart tools, citation-forced verification, correlation-id tracing, and Langfuse observability. See [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Week 2 additions**: lab-PDF/intake-form ingestion with VLM extraction, hybrid (sparse+dense, reranked) retrieval over a clinical-guideline corpus, a Supervisor + 3-worker multi-agent graph as the live chat entry point, and a click-to-source PDF bounding-box overlay on document-grounded citations. See [WEEK2_ARCHITECTURE.md](WEEK2_ARCHITECTURE.md). No branch or environment-variable switch is needed to see Week 2 behavior — it's the only live path on `main`.
+- **Live demo**: [openemr-production-a819.up.railway.app](https://openemr-production-a819.up.railway.app) (synthetic/demo data only — do not enter real patient information).
+- **Run it locally**:
+  ```shell
+  cd docker/development-easy && docker compose up --detach --wait
+  ```
+  App at http://localhost:8300/ (or https://localhost:9300/), login `admin` / `pass`. Copy [.env.example](.env.example) to `docker/development-easy/.env` and set `OPENEMR__COPILOT_API_KEY` (Anthropic, required to enable the co-pilot) and `OPENEMR__VOYAGE_API_KEY` (Voyage, required for guideline retrieval) — see `CLAUDE.md`'s "Local Development" section for the full workflow, including tests and code-quality checks.
+- **More**: [KEY_METRICS.md](KEY_METRICS.md) (success metrics), [EVAL_RESULTS.md](EVAL_RESULTS.md) (test coverage), [USERS.md](USERS.md) (target user), [manual-testing/](manual-testing/) (live testing guides), [AgentForge2.md](AgentForge2.md) (the Week 2 assignment spec this was built against).
+
 ### Contributing
 
 OpenEMR is a leader in healthcare open source software and comprises a large and diverse community of software developers, medical providers and educators with a very healthy mix of both volunteers and professionals. [Join us and learn how to start contributing today!](https://open-emr.org/wiki/index.php/FAQ#How_do_I_begin_to_volunteer_for_the_OpenEMR_project.3F)
