@@ -43,15 +43,22 @@ final class SqlExtractedDocumentStore
     }
 
     /**
+     * Links the row to its stored source file and, in the same write,
+     * replaces `fields_json` with a copy that has the same `documents.id`
+     * stamped into `fields.source_citation.document_id`. That id cannot
+     * exist at save()-time (the document row isn't created yet), so this is
+     * the one place ground-truth document linkage gets written -- never
+     * model-authored. See Citation's docblock.
+     *
      * @throws \OpenEMR\Common\Database\SqlQueryException
      */
-    public function attachDocumentId(int $extractionId, int $documentId): void
+    public function attachDocumentId(int $extractionId, int $documentId, string $fieldsJson): void
     {
         QueryUtils::sqlStatementThrowException(
             'UPDATE `clinical_copilot_extracted_document`
-                SET `document_id` = ?, `last_updated` = NOW()
+                SET `document_id` = ?, `fields_json` = ?, `last_updated` = NOW()
               WHERE `id` = ?',
-            [$documentId, $extractionId],
+            [$documentId, $fieldsJson, $extractionId],
         );
     }
 

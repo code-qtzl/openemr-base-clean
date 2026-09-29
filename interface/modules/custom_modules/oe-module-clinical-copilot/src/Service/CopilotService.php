@@ -44,6 +44,7 @@ use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\Conversation;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
 use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
+use OpenEMR\Modules\ClinicalCopilot\Service\Verification\VerificationClaim;
 use RuntimeException;
 
 final readonly class CopilotService
@@ -212,6 +213,7 @@ final readonly class CopilotService
             inputTokens: $inputTokens,
             outputTokens: $outputTokens,
             retryCount: $this->clientFactory->retryCount(),
+            claims: VerificationClaim::listToArray($outcome->claims),
         );
     }
 

@@ -57,4 +57,24 @@ final readonly class VerificationClaim
 
         return new self(trim($text), $citation);
     }
+
+    /**
+     * @return array{text: string, citation: ?array<string, mixed>}
+     */
+    public function toArray(): array
+    {
+        return [
+            'text' => $this->text,
+            'citation' => $this->citation?->toArray(),
+        ];
+    }
+
+    /**
+     * @param list<self> $claims
+     * @return list<array{text: string, citation: ?array<string, mixed>}>
+     */
+    public static function listToArray(array $claims): array
+    {
+        return array_map(static fn (self $claim): array => $claim->toArray(), $claims);
+    }
 }

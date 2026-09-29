@@ -12,6 +12,28 @@
  * logic needs no changes -- only the surrounding shell and the new
  * sidebar-toggle/attach-document controls are new.
  *
+ * Also renders the click-to-source document-viewer modal (hidden by
+ * default; document-viewer.js drives it). It streams the source PDF from
+ * OpenEMR core's own existing, session-authenticated, IDOR-checked
+ * `controller.php?document&retrieve&...` route -- no new backend endpoint
+ * for this. The retrieve URL needs the site webroot (OEGlobalsBag::
+ * getWebRoot()), distinct from `$base`/`$this->installPath`, which is the
+ * module's own webroot-plus-subpath used for its static assets.
+ *
+ * The base URL below deliberately carries only `document&retrieve` -- no
+ * `as_file`/`original_file` -- because Controller::act()'s legacy routing
+ * (library/classes/Controller.class.php) passes every remaining query
+ * param to C_Document::retrieve_action(?patient_id, $document_id, $as_file,
+ * $original_file, ...) *positionally*, in the query string's own order, not
+ * matched by name. document-viewer.js appends `patient_id`, `document_id`,
+ * `as_file`, `original_file` in that exact order so each lands on the right
+ * parameter; baking `as_file`/`original_file` into this base URL ahead of
+ * the JS-appended `patient_id`/`document_id` silently swapped all four
+ * arguments (verified live: retrieve_action received document_id's value as
+ * $original_file and patient_id's value as $as_file, so `$patient_id`/
+ * `$document_id` inside the method were literally the strings "true"/
+ * "false", failing the file_exists() check and returning an empty body).
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -23,6 +45,7 @@ namespace OpenEMR\Modules\ClinicalCopilot\Controller;
 
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEGlobalsBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 
 final class CopilotPanelController
@@ -36,6 +59,11 @@ final class CopilotPanelController
         $base = attr($this->installPath);
         $session = SessionWrapperFactory::getInstance()->getActiveSession();
         $token = attr(CsrfUtils::collectCsrfToken(session: $session));
+        $sessionPid = $session->get('pid');
+        $pid = attr((string) (is_numeric($sessionPid) ? (int) $sessionPid : 0));
+        $retrieveUrl = attr(OEGlobalsBag::getInstance()->getWebRoot() . '/controller.php?document&retrieve');
+        $workerSrc = attr($this->installPath . '/public/assets/vendor/pdfjs/pdf.worker.min.js');
+        $docCloseLabel = attr(xl('Close'));
 
         if (!CopilotService::isConfigured()) {
             return '<div class="copilot-sidebar copilot-sidebar-unconfigured" id="copilot-sidebar">'
@@ -64,6 +92,7 @@ final class CopilotPanelController
 
         return <<<HTML
             <link rel="stylesheet" href="{$base}/public/assets/css/copilot.css">
+            <link rel="stylesheet" href="{$base}/public/assets/css/document-viewer.css">
             <button type="button" id="copilot-reopen" class="copilot-reopen-tab" hidden>
                 <i class="fa fa-robot" aria-hidden="true"></i> {$reopen}
             </button>
@@ -103,7 +132,8 @@ final class CopilotPanelController
                 </div>
                 <form id="copilot-form" class="form-inline mt-2" autocomplete="off"
                       data-endpoint="{$base}/public/ajax.php"
-                      data-upload-endpoint="{$base}/public/upload-ajax.php">
+                      data-upload-endpoint="{$base}/public/upload-ajax.php"
+                      data-pid="{$pid}">
                     <input type="hidden" id="copilot-csrf" value="{$token}">
                     <button type="button" id="copilot-attach" class="btn btn-outline-secondary mr-2" aria-label="{$attach}" title="{$attach}">
                         <i class="fa fa-paperclip" aria-hidden="true"></i>
@@ -113,6 +143,20 @@ final class CopilotPanelController
                     <button type="submit" class="btn btn-primary" id="copilot-send">{$send}</button>
                 </form>
             </div>
+            <div class="copilot-docviewer-backdrop" id="copilot-docviewer-backdrop" hidden
+                 data-retrieve-url="{$retrieveUrl}" data-worker-src="{$workerSrc}">
+                <div class="copilot-docviewer-panel" id="copilot-docviewer-panel">
+                    <div class="copilot-docviewer-header">
+                        <span id="copilot-docviewer-title"></span>
+                        <button type="button" id="copilot-docviewer-close" class="copilot-icon-btn" aria-label="{$docCloseLabel}" title="{$docCloseLabel}">
+                            <i class="fa fa-times" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div class="copilot-docviewer-body" id="copilot-docviewer-body"></div>
+                </div>
+            </div>
+            <script src="{$base}/public/assets/vendor/pdfjs/pdf.min.js"></script>
+            <script src="{$base}/public/assets/js/document-viewer.js"></script>
             <script src="{$base}/public/assets/js/copilot.js"></script>
             HTML;
     }

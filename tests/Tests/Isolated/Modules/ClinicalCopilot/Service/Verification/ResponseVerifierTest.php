@@ -16,6 +16,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Verification\ResponseVerifier;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/Citation.php';
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/CitationBoundingBox.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/VerificationClaim.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/VerificationOutcome.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Verification/ResponseVerifier.php';
@@ -234,6 +235,89 @@ class ResponseVerifierTest extends TestCase
         );
 
         self::assertFalse($outcome->passed);
+    }
+
+    public function testLabPdfCitationMissingBboxIsRejected(): void
+    {
+        // lab_pdf/intake_form citations need document_id + bbox for the
+        // click-to-source PDF overlay -- unlike chart_tool/guideline, which
+        // have no PDF page to point at.
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => "The patient's A1C is 7.2%.",
+                        'citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'get_extracted_documents',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'a1c',
+                            'quote_or_value' => '7.2%',
+                            'document_id' => '4242',
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['get_extracted_documents'],
+            toolRowCounts: ['get_extracted_documents' => 1],
+        );
+
+        self::assertFalse($outcome->passed);
+        self::assertSame([], $outcome->claims);
+    }
+
+    public function testFullyCitedLabPdfClaimWithDocumentLinkagePasses(): void
+    {
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    [
+                        'text' => "The patient's A1C is 7.2%.",
+                        'citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'get_extracted_documents',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'a1c',
+                            'quote_or_value' => '7.2%',
+                            'document_id' => '4242',
+                            'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
+                        ],
+                    ],
+                ],
+            ],
+            calledTools: ['get_extracted_documents'],
+            toolRowCounts: ['get_extracted_documents' => 1],
+        );
+
+        self::assertTrue($outcome->passed);
+        self::assertCount(1, $outcome->claims);
+        $citation = $outcome->claims[0]->citation;
+        self::assertNotNull($citation);
+        self::assertSame('4242', $citation->documentId);
+        self::assertNotNull($citation->bbox);
+        self::assertSame(0, $citation->bbox->page);
+    }
+
+    public function testRejectedOutcomeNeverCarriesClaims(): void
+    {
+        // Nothing partial ever reaches the browser -- a rejected outcome's
+        // claims must always be empty, even when the model supplied
+        // well-formed-looking ones.
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [
+                    ['text' => 'The patient is improving.', 'citation' => null],
+                ],
+            ],
+            calledTools: [],
+            toolRowCounts: [],
+        );
+
+        self::assertFalse($outcome->passed);
+        self::assertSame([], $outcome->claims);
     }
 
     public function testFullyCitedGuidelineClaimPasses(): void

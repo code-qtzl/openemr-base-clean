@@ -167,14 +167,18 @@ final class ResponseVerifier
         $texts = array_map(static fn (VerificationClaim $claim): string => $claim->text, $claims);
         $reply = trim(($summary !== '' ? $summary . "\n\n" : '') . implode("\n", $texts));
 
-        return VerificationOutcome::passed($reply);
+        return VerificationOutcome::passed($reply, $claims);
     }
 
     /**
      * source_type/source_id/quote_or_value/field_or_chunk_id are always
      * required; page_or_section is required for every source_type except
      * chart_tool (a database row has no page) -- see class docblock's
-     * "KNOWN, DELIBERATE DIVERGENCE" note.
+     * "KNOWN, DELIBERATE DIVERGENCE" note. documentId + a structurally valid
+     * bbox are required in addition, for lab_pdf/intake_form only (Citation::
+     * requiresDocumentLinkage()) -- kept identical to CitationValidator's
+     * rule for the same reason page_or_section's exception is documented
+     * rather than silently diverging twice.
      */
     private static function hasRequiredCitationFields(Citation $citation): bool
     {
@@ -187,6 +191,10 @@ final class ResponseVerifier
         }
 
         if ($citation->sourceType !== self::CHART_TOOL_SOURCE_TYPE && self::isBlank($citation->pageOrSection)) {
+            return false;
+        }
+
+        if ($citation->requiresDocumentLinkage() && (self::isBlank($citation->documentId) || $citation->bbox === null)) {
             return false;
         }
 

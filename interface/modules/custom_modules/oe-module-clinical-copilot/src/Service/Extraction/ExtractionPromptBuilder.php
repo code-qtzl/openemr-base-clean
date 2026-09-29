@@ -39,10 +39,18 @@ final class ExtractionPromptBuilder
 
             The "fields" object must contain every one of these keys: {$fieldList}.
 
-            "source_citation" must itself be an object with exactly these five keys, each a
-            non-empty string: "source_type", "source_id", "page_or_section",
-            "field_or_chunk_id", "quote_or_value" -- describing where in this document the
-            extracted values came from. Use "{$docType->value}" for source_type.
+            "source_citation" must itself be an object describing where in this document the
+            extracted values came from. It must contain these five non-empty string keys:
+            "source_type", "source_id", "page_or_section", "field_or_chunk_id",
+            "quote_or_value". Use "{$docType->value}" for source_type.
+
+            "source_citation" must also contain a "bbox" object locating the primary
+            extracted value on the page: {"page": <0-based page index, integer>,
+            "x0": <left, 0.0-1.0>, "y0": <top, 0.0-1.0>, "x1": <right, 0.0-1.0>,
+            "y1": <bottom, 0.0-1.0>}, normalized against that page's own width and height.
+            Estimate this visually from the page -- do not guess a value if the field is
+            not actually visible on the page. Do not include a "document_id" key; that is
+            filled in separately, not by you.
 
             List-typed fields (e.g. current_medications, allergies) must be a JSON array --
             an empty array is correct when the document genuinely shows none, not a reason

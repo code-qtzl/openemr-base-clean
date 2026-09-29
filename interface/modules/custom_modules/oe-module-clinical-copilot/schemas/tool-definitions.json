@@ -98,7 +98,7 @@
         },
         {
             "name": "submit_answer",
-            "description": "Give your final answer to the clinician. Every clinical claim must carry a citation object grounding it in a tool call made this turn. citation.source_type is one of chart_tool (structured OpenEMR data), lab_pdf or intake_form (document extraction), or guideline (guideline evidence). citation.source_id is always the specific tool call that supports the claim (e.g. get_medications, get_extracted_documents, search_guideline_evidence) -- never a worker's name (consult_chart_worker/consult_document_worker/consult_evidence_worker are not valid citations). citation.quote_or_value is the exact value or quote grounding the claim. citation.page_or_section and citation.field_or_chunk_id are required for every source_type except chart_tool, where a database row has no page. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
+            "description": "Give your final answer to the clinician. Every clinical claim must carry a citation object grounding it in a tool call made this turn. citation.source_type is one of chart_tool (structured OpenEMR data), lab_pdf or intake_form (document extraction), or guideline (guideline evidence). citation.source_id is always the specific tool call that supports the claim (e.g. get_medications, get_extracted_documents, search_guideline_evidence) -- never a worker's name (consult_chart_worker/consult_document_worker/consult_evidence_worker are not valid citations). citation.quote_or_value is the exact value or quote grounding the claim. citation.page_or_section and citation.field_or_chunk_id are required for every source_type except chart_tool, where a database row has no page. For lab_pdf and intake_form citations, also copy citation.document_id and citation.bbox verbatim from the extracted document's fields.source_citation (returned by get_extracted_documents) -- never invent either; if the extracted document has none, omit both rather than guessing. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -143,6 +143,43 @@
                                         "quote_or_value": {
                                             "type": "string",
                                             "description": "The exact quoted text or value grounding this claim."
+                                        },
+                                        "document_id": {
+                                            "type": "string",
+                                            "description": "Required for lab_pdf/intake_form citations: the document_id copied verbatim from that document's fields.source_citation. Never invent this value."
+                                        },
+                                        "bbox": {
+                                            "type": "object",
+                                            "description": "Required for lab_pdf/intake_form citations: the bounding box copied verbatim from that document's fields.source_citation.bbox.",
+                                            "properties": {
+                                                "page": {
+                                                    "type": "integer",
+                                                    "description": "0-based page index."
+                                                },
+                                                "x0": {
+                                                    "type": "number",
+                                                    "description": "Left edge, normalized 0.0-1.0 against page width."
+                                                },
+                                                "y0": {
+                                                    "type": "number",
+                                                    "description": "Top edge, normalized 0.0-1.0 against page height."
+                                                },
+                                                "x1": {
+                                                    "type": "number",
+                                                    "description": "Right edge, normalized 0.0-1.0 against page width."
+                                                },
+                                                "y1": {
+                                                    "type": "number",
+                                                    "description": "Bottom edge, normalized 0.0-1.0 against page height."
+                                                }
+                                            },
+                                            "required": [
+                                                "page",
+                                                "x0",
+                                                "y0",
+                                                "x1",
+                                                "y1"
+                                            ]
                                         }
                                     },
                                     "required": [

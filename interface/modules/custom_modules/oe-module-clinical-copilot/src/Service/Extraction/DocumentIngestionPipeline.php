@@ -36,6 +36,7 @@ namespace OpenEMR\Modules\ClinicalCopilot\Service\Extraction;
 
 use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Database\SqlQueryException;
+use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\ExtractedDocument;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
 use Throwable;
 
@@ -68,14 +69,47 @@ final class DocumentIngestionPipeline
 
         try {
             $documentId = $this->attachmentService->store($patientId, $docType, $payload, $extractionId);
-            $this->store->attachDocumentId($extractionId, $documentId);
+            $stampedFields = self::stampDocumentId($extraction->document->fields, $documentId);
+            $stampedFieldsJson = json_encode([
+                'doc_type' => $extraction->document->docType->value,
+                'fields' => $stampedFields,
+            ], JSON_THROW_ON_ERROR);
+            $this->store->attachDocumentId($extractionId, $documentId, $stampedFieldsJson);
         } catch (Throwable $e) {
             $this->rollBackExtraction($extractionId, $e);
 
             throw $e;
         }
 
-        return DocumentIngestionResult::success($extractionId, $documentId, $extraction->document);
+        $stampedDocument = ExtractedDocument::fromMixed([
+            'doc_type' => $extraction->document->docType->value,
+            'fields' => $stampedFields,
+        ]) ?? $extraction->document;
+
+        return DocumentIngestionResult::success($extractionId, $documentId, $stampedDocument);
+    }
+
+    /**
+     * Stamps the real `documents.id` into `fields.source_citation.document_id`
+     * after DocumentAttachmentService::store() resolves it -- the model
+     * cannot know this id at extraction time (see Citation's docblock), so
+     * this is the one place it gets written, as a fact, not a guess.
+     * `document_id` is stored as a string, matching Citation's typed field.
+     *
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private static function stampDocumentId(array $fields, int $documentId): array
+    {
+        $citation = $fields['source_citation'] ?? null;
+        if (!is_array($citation)) {
+            return $fields;
+        }
+
+        $citation['document_id'] = (string) $documentId;
+        $fields['source_citation'] = $citation;
+
+        return $fields;
     }
 
     /**

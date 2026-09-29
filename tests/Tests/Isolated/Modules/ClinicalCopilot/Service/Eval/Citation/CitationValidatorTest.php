@@ -20,6 +20,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/Citation.php';
+require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/CitationBoundingBox.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/ClinicalClaim.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/ClaimCitationResult.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/CitationValidationReport.php';
@@ -37,6 +38,8 @@ class CitationValidatorTest extends TestCase
                 'page_or_section' => 'page_1',
                 'field_or_chunk_id' => 'a1c',
                 'quote_or_value' => '7.2%',
+                'document_id' => '4242',
+                'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
             ],
         ]);
         self::assertNotNull($claim);
@@ -62,9 +65,76 @@ class CitationValidatorTest extends TestCase
 
         self::assertFalse($result->citationPresent);
         self::assertSame(
-            ['page_or_section', 'field_or_chunk_id', 'quote_or_value'],
+            ['page_or_section', 'field_or_chunk_id', 'quote_or_value', 'document_id', 'bbox'],
             $result->missingFields,
         );
+    }
+
+    public function testLabPdfCitationMissingBboxFailsEvenWithAllFiveTextFields(): void
+    {
+        $claim = ClinicalClaim::fromMixed([
+            'claim' => "The patient's A1C is 7.2%.",
+            'citation' => [
+                'source_type' => 'lab_pdf',
+                'source_id' => 'lab-001',
+                'page_or_section' => 'page_1',
+                'field_or_chunk_id' => 'a1c',
+                'quote_or_value' => '7.2%',
+                'document_id' => '4242',
+            ],
+        ]);
+        self::assertNotNull($claim);
+
+        $result = CitationValidator::validateClaim($claim);
+
+        self::assertFalse($result->citationPresent);
+        self::assertSame(['bbox'], $result->missingFields);
+    }
+
+    public function testLabPdfCitationMissingDocumentIdFailsEvenWithAllFiveTextFields(): void
+    {
+        $claim = ClinicalClaim::fromMixed([
+            'claim' => "The patient's A1C is 7.2%.",
+            'citation' => [
+                'source_type' => 'lab_pdf',
+                'source_id' => 'lab-001',
+                'page_or_section' => 'page_1',
+                'field_or_chunk_id' => 'a1c',
+                'quote_or_value' => '7.2%',
+                'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
+            ],
+        ]);
+        self::assertNotNull($claim);
+
+        $result = CitationValidator::validateClaim($claim);
+
+        self::assertFalse($result->citationPresent);
+        self::assertSame(['document_id'], $result->missingFields);
+    }
+
+    /**
+     * chart_tool/guideline citations have no PDF page to point at --
+     * Citation::requiresDocumentLinkage() must not demand document_id/bbox
+     * for them.
+     */
+    public function testChartToolCitationDoesNotRequireDocumentLinkage(): void
+    {
+        $claim = ClinicalClaim::fromMixed([
+            'claim' => "The patient's most recent A1C was 6.4%.",
+            'citation' => [
+                'source_type' => 'chart_tool',
+                'source_id' => 'get_a1c_series',
+                'page_or_section' => 'n/a',
+                'field_or_chunk_id' => 'value',
+                'quote_or_value' => '6.4%',
+            ],
+        ]);
+        self::assertNotNull($claim);
+
+        $result = CitationValidator::validateClaim($claim);
+
+        self::assertTrue($result->citationPresent);
+        self::assertSame([], $result->missingFields);
     }
 
     public function testMissingCitationObjectFailsWithAllFieldsReportedMissing(): void
@@ -114,6 +184,8 @@ class CitationValidatorTest extends TestCase
                 'page_or_section' => 'page_1',
                 'field_or_chunk_id' => 'a1c',
                 'quote_or_value' => '6.4%',
+                'document_id' => '4243',
+                'bbox' => ['page' => 0, 'x0' => 0.15, 'y0' => 0.20, 'x1' => 0.40, 'y1' => 0.25],
             ],
         ]);
         $uncited = ClinicalClaim::fromMixed(['claim' => 'The patient is at low risk for complications.']);
@@ -141,6 +213,8 @@ class CitationValidatorTest extends TestCase
                 'page_or_section' => 'page_1',
                 'field_or_chunk_id' => 'a1c',
                 'quote_or_value' => '7.2%',
+                'document_id' => '4242',
+                'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
             ],
         ]);
         self::assertNotNull($claim);

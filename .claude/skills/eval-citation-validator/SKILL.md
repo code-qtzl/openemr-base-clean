@@ -23,6 +23,14 @@ Every clinical claim must include citation metadata containing:
 
 A citation passes only when all required fields exist and contain meaningful values.
 
+When `source_type` is `lab_pdf` or `intake_form`, the citation must also include:
+
+- `document_id` — the stored source file's id, so the answer can be linked back to it.
+- `bbox` — `{page, x0, y0, x1, y1}` locating the cited value on the page (0-based page
+  index, coordinates normalized 0.0-1.0), for the visual PDF bounding-box overlay
+  AgentForge2's citation contract requires. A `chart_tool`/`guideline` citation has no
+  PDF page to point at, so neither field is required for those.
+
 ## Eval Output
 
 Return a boolean result:
@@ -56,7 +64,9 @@ Input:
 "source_id": "lab-001",
 "page_or_section": "page_1",
 "field_or_chunk_id": "a1c",
-"quote_or_value": "7.2%"
+"quote_or_value": "7.2%",
+"document_id": "4242",
+"bbox": {"page": 0, "x0": 0.12, "y0": 0.30, "x1": 0.44, "y1": 0.35}
 }
 }
 
@@ -120,14 +130,16 @@ Include both positive and negative cases.
 
 Examples should cover:
 
-- Valid lab PDF citation
-- Valid intake-form citation
+- Valid lab PDF citation (with `document_id`/`bbox`)
+- Valid intake-form citation (with `document_id`/`bbox`)
 - Missing citation
 - Partial citation
 - Empty citation fields
 - Multiple claims where one lacks a citation
 - Evidence-retrieval response with source metadata
 - Response containing an unsupported clinical claim
+- Lab PDF/intake-form citation missing `document_id` or `bbox`
+- Lab PDF/intake-form citation with structurally invalid `bbox` coordinates
 
 ## CI Behavior
 

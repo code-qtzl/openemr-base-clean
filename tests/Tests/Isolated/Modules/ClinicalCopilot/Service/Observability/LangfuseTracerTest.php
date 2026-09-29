@@ -91,6 +91,7 @@ class LangfuseTracerTest extends TestCase
             inputTokens: 100,
             outputTokens: 50,
             retryCount: 0,
+            claims: [],
         );
 
         $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', $result, 0.0, 1.0);
@@ -127,6 +128,7 @@ class LangfuseTracerTest extends TestCase
             inputTokens: 0,
             outputTokens: 0,
             retryCount: 0,
+            claims: [],
         );
 
         $tracer->traceAsk('c1', 27, 'admin', 'claude-opus-5', 'q', $result, 0.0, 1.0);
@@ -366,6 +368,7 @@ class LangfuseTracerTest extends TestCase
             inputTokens: 0,
             outputTokens: 0,
             retryCount: $retryCount,
+            claims: [],
         );
     }
 

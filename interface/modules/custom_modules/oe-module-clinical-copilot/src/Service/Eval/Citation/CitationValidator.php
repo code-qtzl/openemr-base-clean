@@ -5,9 +5,13 @@
  * category (.claude/skills/eval-citation-validator/SKILL.md). A claim passes
  * only when its citation carries all five required fields -- source_type,
  * source_id, page_or_section, field_or_chunk_id, quote_or_value -- each a
- * non-empty string. This is pure structural validation: it never judges
- * whether a citation is truthful or well-formed prose, only whether the
- * required metadata is present, and it never repairs a missing field.
+ * non-empty string, plus, for a `lab_pdf`/`intake_form` citation, a
+ * `document_id` and a structurally valid `bbox` (Citation::
+ * requiresDocumentLinkage()) -- a `chart_tool`/`guideline` citation has no
+ * PDF page to point at, so neither is required for those. This is pure
+ * structural validation: it never judges whether a citation is truthful or
+ * well-formed prose, only whether the required metadata is present, and it
+ * never repairs a missing field.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -33,13 +37,24 @@ final class CitationValidator
 
     public static function validateClaim(ClinicalClaim $claim): ClaimCitationResult
     {
-        $fields = $claim->citation?->toArray() ?? array_fill_keys(self::REQUIRED_FIELDS, null);
+        $citation = $claim->citation;
+        $fields = $citation?->toArray() ?? array_fill_keys(self::REQUIRED_FIELDS, null);
 
         $missing = [];
         foreach (self::REQUIRED_FIELDS as $field) {
             $value = $fields[$field] ?? null;
             if ($value === null || trim($value) === '') {
                 $missing[] = $field;
+            }
+        }
+
+        if ($citation?->requiresDocumentLinkage() ?? false) {
+            if ($citation->documentId === null || trim($citation->documentId) === '') {
+                $missing[] = 'document_id';
+            }
+
+            if ($citation->bbox === null) {
+                $missing[] = 'bbox';
             }
         }
 

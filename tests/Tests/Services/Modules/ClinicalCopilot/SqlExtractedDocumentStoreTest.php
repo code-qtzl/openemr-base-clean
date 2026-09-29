@@ -84,11 +84,12 @@ final class SqlExtractedDocumentStoreTest extends TestCase
         $pid = $this->installPrimaryPatient();
         $id = $this->trackExtraction($this->store->save($pid, SchemaDocType::IntakeForm, '{}'));
 
-        $this->store->attachDocumentId($id, 424242);
+        $this->store->attachDocumentId($id, 424242, '{"stamped":true}');
 
         $record = $this->store->find($id);
         self::assertNotNull($record);
         self::assertSame(424242, $record->documentId);
+        self::assertSame('{"stamped":true}', $record->fieldsJson);
     }
 
     private function trackExtraction(int $extractionId): int

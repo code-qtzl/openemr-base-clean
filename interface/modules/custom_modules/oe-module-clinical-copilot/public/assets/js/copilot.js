@@ -24,8 +24,54 @@
     var csrf = document.getElementById('copilot-csrf');
     var endpoint = form.dataset.endpoint;
     var uploadEndpoint = form.dataset.uploadEndpoint;
+    var patientId = form.dataset.pid;
 
-    function append(text, variant, toolsUsed) {
+    // A citation is only openable in the document viewer when it points at
+    // a real stored document (lab_pdf/intake_form with a document_id) --
+    // chart_tool/guideline citations have no PDF page to show.
+    function isDocumentCitation(citation) {
+        return !!citation
+            && (citation.source_type === 'lab_pdf' || citation.source_type === 'intake_form')
+            && !!citation.document_id;
+    }
+
+    function openSourceViewer(citation, title) {
+        if (!window.CopilotDocumentViewer || !patientId) {
+            return;
+        }
+
+        window.CopilotDocumentViewer.open({
+            patientId: patientId,
+            documentId: citation.document_id,
+            title: title,
+            bbox: citation.bbox || null
+        });
+    }
+
+    function appendSourceChips(container, claims) {
+        if (!claims || !claims.length) {
+            return;
+        }
+
+        var chipIndex = 0;
+        claims.forEach(function (claim) {
+            if (!isDocumentCitation(claim.citation)) {
+                return;
+            }
+
+            chipIndex += 1;
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'copilot-source-chip';
+            chip.textContent = 'Source ' + chipIndex;
+            chip.addEventListener('click', function () {
+                openSourceViewer(claim.citation, 'Source ' + chipIndex);
+            });
+            container.appendChild(chip);
+        });
+    }
+
+    function append(text, variant, toolsUsed, claims) {
         var div = document.createElement('div');
         div.className = 'copilot-msg copilot-msg-' + variant;
         div.textContent = text;
@@ -36,6 +82,8 @@
             tools.textContent = 'Chart data read: ' + toolsUsed.join(', ');
             div.appendChild(tools);
         }
+
+        appendSourceChips(div, claims);
 
         log.appendChild(div);
         log.scrollTop = log.scrollHeight;
@@ -81,7 +129,7 @@
                     }
                     append(message, 'error');
                 } else {
-                    append(data.reply || '(no answer returned)', 'assistant', data.toolsUsed);
+                    append(data.reply || '(no answer returned)', 'assistant', data.toolsUsed, data.claims);
                 }
             })
             .catch(function () {
@@ -205,10 +253,22 @@
 
                 if (data.success) {
                     var summary = formatExtractedFields(data.fields);
-                    append(
+                    var msg = append(
                         fileName + ' processed as ' + data.docType + '.' + (summary ? ' ' + summary : ''),
                         'upload'
                     );
+
+                    var sourceCitation = data.fields && data.fields.source_citation;
+                    if (data.documentId && sourceCitation) {
+                        appendSourceChips(msg, [{
+                            citation: {
+                                source_type: data.docType,
+                                document_id: String(data.documentId),
+                                bbox: sourceCitation.bbox || null
+                            }
+                        }]);
+                    }
+
                     resetUploadPanel();
                     return;
                 }

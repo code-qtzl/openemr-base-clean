@@ -20,6 +20,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/Citation.php';
+require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/CitationBoundingBox.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/ClinicalClaim.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/ClaimCitationResult.php';
 require_once __DIR__ . '/../../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/CitationValidationReport.php';
@@ -79,6 +80,8 @@ class SafeRefusalValidatorTest extends TestCase
                         'page_or_section' => 'page_1',
                         'field_or_chunk_id' => 'hba1c',
                         'quote_or_value' => '7.2%',
+                        'document_id' => '4242',
+                        'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
                     ],
                 ],
             ],

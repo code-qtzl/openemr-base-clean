@@ -5,9 +5,10 @@
  * metadata (if any) offered as its grounding.
  *
  * Both this DTO and OpenEMR\Modules\ClinicalCopilot\Service\Verification\
- * VerificationClaim now parse the same five-field Citation contract
- * (source_type/source_id/page_or_section/field_or_chunk_id/quote_or_value) --
- * they are kept as two separate classes anyway, deliberately, because they
+ * VerificationClaim now parse the same Citation contract (source_type/
+ * source_id/page_or_section/field_or_chunk_id/quote_or_value, plus
+ * document_id/bbox for lab_pdf/intake_form citations) -- they are kept as two
+ * separate classes anyway, deliberately, because they
  * serve two different behaviors with different failure modes: VerificationClaim
  * feeds ResponseVerifier's safety-critical live reject-to-fallback decision,
  * while this class feeds CitationValidator's report-only offline eval gate.

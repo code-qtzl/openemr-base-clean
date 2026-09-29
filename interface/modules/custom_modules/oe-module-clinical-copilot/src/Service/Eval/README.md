@@ -6,13 +6,18 @@ where a rubric category can be validated structurally. Each eval category is
 its own subdirectory here, paired with a golden set and an isolated PHPUnit
 test so a regression is caught automatically on every PR.
 
-None of these are wired into `CopilotChatController`/`Supervisor`'s live
-request path yet -- they are eval-gate tooling only (golden set + PHPUnit).
-The golden set totals exactly 50 cases across the 5 categories below, and
-`bin/eval-gate.php` (see "PR-blocking eval gate" further down) is the actual
-PR-blocking implementation of AgentForge2 Core Requirement #6's "a 50-case
-golden set and a PR-blocking Git Hook." Wiring a live response through these
-validators is a separate, later integration decision.
+`citation_present` is now also wired into the live request path: `Citation`,
+`ResponseVerifier`, and `AskResult`/`CopilotChatController` all enforce and
+surface the same contract this validator checks (see Citation's docblock).
+The other four categories are not wired into `CopilotChatController`/
+`Supervisor`'s live request path -- they remain eval-gate tooling only
+(golden set + PHPUnit). The golden set totals 52 cases across the 5
+categories below (the 50-case AgentForge2 Core Requirement #6 floor plus 2
+cases added for the citation contract's bbox/document-linkage requirement),
+and `bin/eval-gate.php` (see "PR-blocking eval gate" further down) is the
+actual PR-blocking implementation of that requirement's "a 50-case golden
+set and a PR-blocking Git Hook." Wiring the other four validators through to
+a live response is a separate, later integration decision.
 
 | Category | Status |
 |---|---|
@@ -26,24 +31,28 @@ validators is a separate, later integration decision.
 
 Validates that every clinical claim in a co-pilot response carries complete
 citation metadata: `source_type`, `source_id`, `page_or_section`,
-`field_or_chunk_id`, `quote_or_value`, each a non-empty string. A response
-passes only if *every* claim in it is grounded.
+`field_or_chunk_id`, `quote_or_value`, each a non-empty string, plus (for
+`lab_pdf`/`intake_form` citations only) a `document_id` and a structurally
+valid `bbox` -- the visual PDF bounding-box overlay AgentForge2's citation
+contract requires (`Citation::requiresDocumentLinkage()`). A response passes
+only if *every* claim in it is grounded.
 
 ### Files created
 
-Production code (`interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Citation/`):
-1. `Citation.php` — citation metadata DTO + parser
-2. `ClinicalClaim.php` — claim + citation DTO + parser
-3. `ClaimCitationResult.php` — per-claim validation result DTO
-4. `CitationValidationReport.php` — batch validation result DTO
-5. `CitationValidator.php` — the validator logic
+Production code (`interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Citation/` and `.../Service/Eval/Citation/`):
+1. `Citation.php` — citation metadata DTO + parser (shared with the live path)
+2. `CitationBoundingBox.php` — `bbox` value object + tolerant parser
+3. `ClinicalClaim.php` — claim + citation DTO + parser
+4. `ClaimCitationResult.php` — per-claim validation result DTO
+5. `CitationValidationReport.php` — batch validation result DTO
+6. `CitationValidator.php` — the validator logic
 
 Test fixtures (`tests/Tests/Fixtures/ClinicalCopilot/Eval/`):
-6. `CitationGoldenSetCase.php` — golden-set case DTO
-7. `CitationGoldenSet.php` — the 12 golden-set cases
+7. `CitationGoldenSetCase.php` — golden-set case DTO
+8. `CitationGoldenSet.php` — the 14 golden-set cases
 
 Test (`tests/Tests/Isolated/Modules/ClinicalCopilot/Service/Eval/Citation/`):
-8. `CitationValidatorTest.php` — 18 tests
+9. `CitationValidatorTest.php` — 24 tests
 
 ## `schema_valid`
 

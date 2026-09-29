@@ -28,7 +28,7 @@ final class CitationGoldenSet
         return [
             new CitationGoldenSetCase(
                 id: 'valid-lab-pdf',
-                description: 'A lab-value claim grounded in a scanned lab PDF.',
+                description: 'A lab-value claim grounded in a scanned lab PDF, with a bounding box locating it on the page.',
                 claims: [
                     [
                         'claim' => "The patient's A1C is 7.2%.",
@@ -38,6 +38,8 @@ final class CitationGoldenSet
                             'page_or_section' => 'page_1',
                             'field_or_chunk_id' => 'a1c',
                             'quote_or_value' => '7.2%',
+                            'document_id' => '4242',
+                            'bbox' => ['page' => 0, 'x0' => 0.12, 'y0' => 0.30, 'x1' => 0.44, 'y1' => 0.35],
                         ],
                     ],
                 ],
@@ -46,7 +48,7 @@ final class CitationGoldenSet
             ),
             new CitationGoldenSetCase(
                 id: 'valid-intake-form',
-                description: 'A history claim grounded in a structured intake-form field.',
+                description: 'A history claim grounded in a structured intake-form field, with a bounding box locating it on the page.',
                 claims: [
                     [
                         'claim' => 'The patient reports a known penicillin allergy.',
@@ -56,6 +58,8 @@ final class CitationGoldenSet
                             'page_or_section' => 'allergies',
                             'field_or_chunk_id' => 'allergy_1',
                             'quote_or_value' => 'Penicillin - rash',
+                            'document_id' => '4300',
+                            'bbox' => ['page' => 0, 'x0' => 0.10, 'y0' => 0.55, 'x1' => 0.60, 'y1' => 0.60],
                         ],
                     ],
                 ],
@@ -237,6 +241,45 @@ final class CitationGoldenSet
                 ],
                 expectedCitationPresent: false,
                 tags: ['negative', 'whitespace_boundary'],
+            ),
+            new CitationGoldenSetCase(
+                id: 'lab-pdf-missing-bbox',
+                description: 'A lab-PDF citation with all five text fields but no bounding box, so a click-to-source overlay has nothing to render.',
+                claims: [
+                    [
+                        'claim' => "The patient's A1C is 7.2%.",
+                        'citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'lab-001',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'a1c',
+                            'quote_or_value' => '7.2%',
+                            'document_id' => '4242',
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: false,
+                tags: ['negative', 'lab_pdf', 'missing_bbox'],
+            ),
+            new CitationGoldenSetCase(
+                id: 'intake-form-invalid-bbox-coordinates',
+                description: 'An intake-form citation whose bbox coordinates are inverted (x0 past x1), which parses to no bbox at all.',
+                claims: [
+                    [
+                        'claim' => 'The patient reports a known penicillin allergy.',
+                        'citation' => [
+                            'source_type' => 'intake_form',
+                            'source_id' => 'intake-2026-01-05',
+                            'page_or_section' => 'allergies',
+                            'field_or_chunk_id' => 'allergy_1',
+                            'quote_or_value' => 'Penicillin - rash',
+                            'document_id' => '4300',
+                            'bbox' => ['page' => 0, 'x0' => 0.60, 'y0' => 0.55, 'x1' => 0.10, 'y1' => 0.60],
+                        ],
+                    ],
+                ],
+                expectedCitationPresent: false,
+                tags: ['negative', 'intake_form', 'invalid_bbox'],
             ),
         ];
     }

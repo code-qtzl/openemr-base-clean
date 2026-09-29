@@ -37,6 +37,13 @@ final readonly class AskResult
      * @param int $retryCount SDK-level retries across every turn of this
      *                        request (AnthropicClientFactory::retryCount()),
      *                        for LangfuseTracer -- PUNCH_LIST.md 3.3.
+     * @param list<array{text: string, citation: ?array<string, mixed>}> $claims
+     *                        The verified answer's claims and their citations
+     *                        (Citation::toArray() shape, including
+     *                        document_id/bbox when present), for the browser
+     *                        to render a click-to-source control. Always
+     *                        empty when verificationPassed is false -- see
+     *                        VerificationOutcome's docblock.
      */
     public function __construct(
         public string $reply,
@@ -47,6 +54,7 @@ final readonly class AskResult
         public int $inputTokens,
         public int $outputTokens,
         public int $retryCount,
+        public array $claims,
     ) {
     }
 }

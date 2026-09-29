@@ -190,6 +190,7 @@ final readonly class CopilotChatController
                 'toolsUsed' => $result->toolsUsed,
                 'correlationId' => $correlationId,
                 'verificationPassed' => $result->verificationPassed,
+                'claims' => $result->claims,
             ]);
         } catch (AnthropicException | SqlQueryException | RuntimeException | JsonException $e) {
             $endedAt = microtime(true);

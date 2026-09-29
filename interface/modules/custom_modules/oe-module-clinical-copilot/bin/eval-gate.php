@@ -401,8 +401,10 @@ final class EvalGateCli
         }
 
         echo "\nTotal golden-set cases: {$totalCases}";
-        if ($totalCases !== 50) {
-            echo " (warning: expected 50 per AgentForge2 Core Requirement #6 -- not a gate failure, but check for an accidental case addition/removal)";
+        if ($totalCases !== 52) {
+            echo ' (warning: expected 52 -- the 50-case AgentForge2 Core Requirement #6 floor'
+                . ' plus 2 bbox-linkage cases for the citation contract\'s PDF-overlay requirement'
+                . ' -- not a gate failure, but check for an accidental case addition/removal)';
         }
         echo "\n\n";
 
