@@ -81,11 +81,15 @@ every boot.
 
 ## Deploying
 
-Auto-deploy runs from `.gitlab-ci.yml` on push to `main`. Manual equivalent:
+Deploys are manual. The old `.gitlab-ci.yml` auto-deploy is dead (the primary
+remote is GitHub) and there is no GitHub Actions equivalent. Run:
 
 ```bash
-railway up --service openemr --environment production --ci
+railway up --service openemr --environment production \
+  --project 6b2854a5-a805-4f32-91ab-01ed6981584c --ci --message "<description>"
 ```
+
+`--project` needs the project UUID, not its display name.
 
 ## SEED_RESET
 
