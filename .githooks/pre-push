@@ -1,0 +1,24 @@
+#!/bin/sh
+# Clinical Co-Pilot eval gate as a local pre-push hook (AgentForge2 Core
+# Requirement #6). Mirrors .github/workflows/eval-gate.yml so a regression is
+# caught before it leaves the machine. Bypass in an emergency: git push --no-verify
+# __copilot_eval_gate_pre_push__
+set -u
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+echo "pre-push: running Clinical Co-Pilot eval gate..."
+if [ -f vendor/autoload.php ] && command -v composer >/dev/null 2>&1; then
+    composer eval-gate
+elif command -v openemr-cmd >/dev/null 2>&1; then
+    openemr-cmd e 'cd /var/www/localhost/htdocs/openemr && composer eval-gate'
+else
+    echo "pre-push: no host vendor/ and no openemr-cmd; cannot run eval gate." >&2
+    echo "Install deps (composer install) or use openemr-cmd, or push with --no-verify." >&2
+    exit 1
+fi
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "pre-push: eval gate FAILED -- push blocked." >&2
+    exit 1
+fi
