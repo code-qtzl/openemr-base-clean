@@ -32,7 +32,6 @@ final class CitationValidator
         'source_id',
         'page_or_section',
         'field_or_chunk_id',
-        'quote_or_value',
     ];
 
     public static function validateClaim(ClinicalClaim $claim): ClaimCitationResult
