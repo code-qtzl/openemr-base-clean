@@ -34,6 +34,7 @@ use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\ExtractedDocument;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentIngestionPipeline;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentPayload;
@@ -153,13 +154,18 @@ final readonly class CopilotDocumentUploadController
                 );
             }
 
-            if ($result->success && $result->document !== null) {
+            if ($result->success && $result->documents !== []) {
+                // One entry per extracted result: a lab panel yields several
+                // (each with its own source bbox), an intake form exactly one.
                 return new JsonResponse([
                     'success' => true,
-                    'docType' => $result->document->docType->value,
-                    'fields' => $result->document->fields,
+                    'docType' => $result->documents[0]->docType->value,
+                    'results' => array_map(
+                        static fn (ExtractedDocument $document): array => $document->fields,
+                        $result->documents,
+                    ),
                     'documentId' => $result->documentId,
-                    'extractionId' => $result->extractionId,
+                    'extractionIds' => $result->extractionIds,
                     'correlationId' => $correlationId,
                 ]);
             }

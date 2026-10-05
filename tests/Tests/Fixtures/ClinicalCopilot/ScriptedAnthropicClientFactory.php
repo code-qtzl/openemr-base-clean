@@ -87,6 +87,18 @@ final class ScriptedAnthropicClientFactory implements AnthropicClientFactory
     }
 
     /**
+     * A text response cut off at the token limit (stop_reason: max_tokens) --
+     * for exercising DocumentExtractionService's truncation handling.
+     */
+    public function truncatedText(string $text = ''): static
+    {
+        $content = [['type' => 'text', 'text' => $text]];
+        $this->responses[] = $this->message(content: $content, stopReason: 'max_tokens');
+
+        return $this;
+    }
+
+    /**
      * Script a closing turn with no further tool calls, ending the loop.
      * Required after any toolUse()/submitAnswer() turn -- see class docblock.
      */
@@ -99,7 +111,7 @@ final class ScriptedAnthropicClientFactory implements AnthropicClientFactory
         return $this;
     }
 
-    public function create(string $apiKey, string $correlationId): Client
+    public function create(string $apiKey, string $correlationId, ?float $timeoutSeconds = null): Client
     {
         $this->lastTransporter = new FakeAnthropicTransporter($this->responses);
 

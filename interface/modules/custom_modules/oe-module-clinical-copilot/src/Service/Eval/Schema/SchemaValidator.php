@@ -35,7 +35,7 @@ final class SchemaValidator
         'unit' => SchemaFieldKind::Scalar,
         'reference_range' => SchemaFieldKind::Scalar,
         'collection_date' => SchemaFieldKind::Scalar,
-        'abnormal_flag' => SchemaFieldKind::Scalar,
+        'abnormal_flag' => SchemaFieldKind::PresentScalar,
         'source_citation' => SchemaFieldKind::ObjectField,
     ];
 
@@ -104,6 +104,7 @@ final class SchemaValidator
 
         return match ($kind) {
             SchemaFieldKind::Scalar => self::checkScalar($value),
+            SchemaFieldKind::PresentScalar => null,
             SchemaFieldKind::ListField => is_array($value) ? null : 'wrong_shape',
             SchemaFieldKind::ObjectField => self::checkObject($value),
         };

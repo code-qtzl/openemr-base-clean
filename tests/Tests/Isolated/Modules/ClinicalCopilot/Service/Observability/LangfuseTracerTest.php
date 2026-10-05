@@ -161,7 +161,7 @@ class LangfuseTracerTest extends TestCase
             false,
             false,
             null,
-            new ExtractionTelemetry('claude-opus-5', 0.1, 0.9, 1200, 340, 7, ['unit', 'reference_range']),
+            new ExtractionTelemetry('claude-opus-5', 0.1, 0.9, 1200, 340, 7, ['unit', 'reference_range'], 1),
             0.0,
             1.0,
         );
@@ -172,6 +172,7 @@ class LangfuseTracerTest extends TestCase
 
         $root = self::attributesOf(self::spanAt($spans, 0));
         self::assertSame('lab_pdf', $root['langfuse.trace.metadata.doc_type']);
+        self::assertSame(1, $root['langfuse.trace.metadata.result_count']);
         self::assertSame(5, $root['langfuse.trace.metadata.fields_present']);
         self::assertSame(0.7143, $root['langfuse.trace.metadata.completeness']);
         self::assertSame('unit,reference_range', $root['langfuse.trace.metadata.missing_fields']);

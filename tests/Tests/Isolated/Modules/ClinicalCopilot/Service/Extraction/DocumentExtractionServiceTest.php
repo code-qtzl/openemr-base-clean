@@ -65,8 +65,8 @@ class DocumentExtractionServiceTest extends TestCase
         $result = $service->extract('corr-1', $payload, SchemaDocType::LabPdf);
 
         self::assertTrue($result->success);
-        self::assertNotNull($result->document);
-        self::assertSame(SchemaDocType::LabPdf, $result->document->docType);
+        self::assertCount(1, $result->documents);
+        self::assertSame(SchemaDocType::LabPdf, $result->documents[0]->docType);
     }
 
     public function testSuccessCarriesTelemetryWithFullCompleteness(): void
@@ -127,6 +127,154 @@ class DocumentExtractionServiceTest extends TestCase
         self::assertSame(0.0, $telemetry->completeness());
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function panelResults(int $count): array
+    {
+        $results = [];
+        for ($i = 0; $i < $count; $i++) {
+            $results[] = [...self::VALID_LAB_FIELDS, 'test_name' => 'test-' . $i];
+        }
+
+        return $results;
+    }
+
+    private static function labPayload(): DocumentPayload
+    {
+        return DocumentPayload::fromBytes('lab.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+    }
+
+    public function testLabPanelYieldsOneDocumentPerResultEachKeepingTheFlatSchema(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => self::panelResults(3)],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p1', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertTrue($result->success);
+        self::assertCount(3, $result->documents);
+        self::assertSame(
+            ['test-0', 'test-1', 'test-2'],
+            array_map(static fn ($d): mixed => $d->fields['test_name'], $result->documents),
+        );
+        self::assertNotNull($result->telemetry);
+        self::assertSame(3, $result->telemetry->resultCount);
+        self::assertSame(21, $result->telemetry->fieldsExpected);
+        self::assertSame(1.0, $result->telemetry->completeness());
+    }
+
+    /**
+     * All-or-nothing: one bad row rejects the whole upload, and every failing
+     * field is named with its row index so an incomplete panel is never stored.
+     */
+    public function testOneInvalidResultRejectsThePanelAndNamesTheFailingFieldsByIndex(): void
+    {
+        $results = self::panelResults(3);
+        unset($results[0]['unit'], $results[2]['reference_range']);
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => $results],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p2', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertNotNull($result->validation);
+        self::assertSame(
+            ['results[0].unit', 'results[2].reference_range'],
+            array_map(static fn ($f): string => $f->field, $result->validation->findings),
+        );
+        self::assertNotNull($result->telemetry);
+        self::assertSame(['results[0].unit', 'results[2].reference_range'], $result->telemetry->missingFields);
+        self::assertSame(19, $result->telemetry->fieldsPresent());
+    }
+
+    public function testEmptyResultsListFailsToParse(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => []],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p3', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertSame([], $result->documents);
+        self::assertStringContainsString('no results', (string) $result->failureReason);
+    }
+
+    public function testMoreThanTheMaximumResultsIsRejectedNotTruncated(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => self::panelResults(DocumentExtractionService::MAX_RESULTS + 1)],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p4', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertSame([], $result->documents);
+        self::assertStringContainsString((string) DocumentExtractionService::MAX_RESULTS, (string) $result->failureReason);
+    }
+
+    public function testExactlyTheMaximumResultsIsAccepted(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => self::panelResults(DocumentExtractionService::MAX_RESULTS)],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p5', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertTrue($result->success);
+        self::assertCount(DocumentExtractionService::MAX_RESULTS, $result->documents);
+    }
+
+    /** A cut-off response is invalid JSON by construction; the reason must say why. */
+    public function testResponseCutOffAtTheTokenLimitFailsWithAClearReason(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->truncatedText('{"doc_type": "lab_pdf", "results": [{"test_na');
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p6', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertStringContainsString('cut off', (string) $result->failureReason);
+        self::assertStringNotContainsString('valid JSON', (string) $result->failureReason);
+    }
+
+    public function testNonListResultsFailsToParse(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => ['a' => self::VALID_LAB_FIELDS]],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-p7', self::labPayload(), SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertStringContainsString('results', (string) $result->failureReason);
+    }
+
+    public function testIntakeFormIgnoresAResultsKeyAndStillRequiresFields(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'intake_form', 'results' => self::panelResults(2)],
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $result = (new DocumentExtractionService($factory))->extract(
+            'corr-p8',
+            DocumentPayload::fromBytes('intake.pdf', 'application/pdf', '%PDF-1.4 fake bytes'),
+            SchemaDocType::IntakeForm,
+        );
+
+        self::assertFalse($result->success);
+        self::assertStringContainsString('envelope', (string) $result->failureReason);
+    }
+
     public function testSchemaInvalidResponseIsReportedNotSilentlyTrusted(): void
     {
         $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode([
@@ -153,7 +301,7 @@ class DocumentExtractionServiceTest extends TestCase
         $result = $service->extract('corr-3', $payload, SchemaDocType::LabPdf);
 
         self::assertFalse($result->success);
-        self::assertNull($result->document);
+        self::assertSame([], $result->documents);
         self::assertNotNull($result->failureReason);
     }
 
@@ -169,7 +317,7 @@ class DocumentExtractionServiceTest extends TestCase
         $result = $service->extract('corr-4', $payload, SchemaDocType::LabPdf);
 
         self::assertFalse($result->success);
-        self::assertNull($result->document);
+        self::assertSame([], $result->documents);
         self::assertStringContainsString('doc_type', (string) $result->failureReason);
     }
 

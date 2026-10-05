@@ -204,6 +204,7 @@ final readonly class LangfuseTracer
                     'langfuse.trace.metadata.doc_type' => $docType->value,
                     'langfuse.trace.metadata.success' => $success,
                     'langfuse.trace.metadata.schema_valid' => $schemaValid,
+                    'langfuse.trace.metadata.result_count' => $telemetry->resultCount,
                     'langfuse.trace.metadata.fields_expected' => $telemetry->fieldsExpected,
                     'langfuse.trace.metadata.fields_present' => $telemetry->fieldsPresent(),
                     'langfuse.trace.metadata.completeness' => $telemetry->completeness(),

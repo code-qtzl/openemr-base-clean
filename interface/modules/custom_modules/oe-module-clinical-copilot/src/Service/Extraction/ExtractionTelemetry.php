@@ -24,9 +24,15 @@ final readonly class ExtractionTelemetry
     /**
      * @param float $startedAt microtime(true) reading before the API call.
      * @param float $endedAt microtime(true) reading after it returned.
-     * @param int $fieldsExpected Count of the doc type's required fields.
+     * @param int $fieldsExpected Required fields across every extracted
+     *                            result (the doc type's field count times
+     *                            $resultCount).
      * @param list<string> $missingFields Required field names that were
-     *                                    missing, empty or the wrong shape.
+     *                                    missing, empty or the wrong shape;
+     *                                    prefixed `results[i].` for a lab
+     *                                    panel.
+     * @param int $resultCount Results extracted from the document (1 for an
+     *                         intake form; one per test row for a lab PDF).
      */
     public function __construct(
         public string $model,
@@ -36,6 +42,7 @@ final readonly class ExtractionTelemetry
         public int $outputTokens,
         public int $fieldsExpected,
         public array $missingFields,
+        public int $resultCount = 1,
     ) {
     }
 

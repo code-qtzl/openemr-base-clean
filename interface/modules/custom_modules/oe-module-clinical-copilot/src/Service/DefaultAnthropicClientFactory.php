@@ -45,11 +45,11 @@ final class DefaultAnthropicClientFactory implements AnthropicClientFactory
     /** @var callable|null */
     private $heartbeat = null;
 
-    public function create(string $apiKey, string $correlationId): Client
+    public function create(string $apiKey, string $correlationId, ?float $timeoutSeconds = null): Client
     {
         $guzzleOptions = [
             'connect_timeout' => self::CONNECT_TIMEOUT_SECONDS,
-            'timeout' => self::REQUEST_TIMEOUT_SECONDS,
+            'timeout' => $timeoutSeconds ?? self::REQUEST_TIMEOUT_SECONDS,
         ];
 
         // Guzzle's curl handler enables CURLOPT_NOPROGRESS => false whenever a

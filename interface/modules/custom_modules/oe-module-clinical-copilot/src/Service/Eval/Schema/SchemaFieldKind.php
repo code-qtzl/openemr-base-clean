@@ -27,6 +27,14 @@ enum SchemaFieldKind
     case Scalar;
 
     /**
+     * Present and non-null, but an empty string is valid -- for a field where
+     * blank is itself the honest value. A lab report prints no flag for a
+     * normal result, so a blank `abnormal_flag` means "not flagged", not
+     * "missing"; failing it would reject most real panels.
+     */
+    case PresentScalar;
+
+    /**
      * Present and an array. Empty is valid -- e.g. "no known allergies".
      */
     case ListField;

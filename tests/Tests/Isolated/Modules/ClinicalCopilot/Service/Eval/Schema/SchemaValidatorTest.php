@@ -136,6 +136,50 @@ class SchemaValidatorTest extends TestCase
     }
 
     /**
+     * A lab report prints no flag for a normal result, so a blank
+     * abnormal_flag is valid ("not flagged"). Only an absent key fails, and
+     * the leniency does not leak to other scalars (an empty reference_range
+     * is still empty).
+     */
+    public function testBlankAbnormalFlagIsValidButAbsentOrOtherBlankScalarsAreNot(): void
+    {
+        $base = [
+            'test_name' => 'Potassium',
+            'value' => '4.2',
+            'unit' => 'mmol/L',
+            'reference_range' => '3.5-5.1',
+            'collection_date' => '2026-09-14',
+            'abnormal_flag' => '',
+            'source_citation' => [
+                'source_type' => 'lab_pdf',
+                'source_id' => 'lab-003',
+                'page_or_section' => 'page_1',
+                'field_or_chunk_id' => 'potassium',
+                'quote_or_value' => '4.2',
+            ],
+        ];
+
+        $blankFlag = ExtractedDocument::fromMixed(['doc_type' => 'lab_pdf', 'fields' => $base]);
+        self::assertNotNull($blankFlag);
+        self::assertTrue(SchemaValidator::validate($blankFlag)->schemaValid);
+
+        $noFlagKey = $base;
+        unset($noFlagKey['abnormal_flag']);
+        $absent = ExtractedDocument::fromMixed(['doc_type' => 'lab_pdf', 'fields' => $noFlagKey]);
+        self::assertNotNull($absent);
+        $absentResult = SchemaValidator::validate($absent);
+        self::assertFalse($absentResult->schemaValid);
+        self::assertSame('abnormal_flag', $absentResult->findings[0]->field);
+        self::assertSame('missing', $absentResult->findings[0]->reason);
+
+        $blankRange = ExtractedDocument::fromMixed(['doc_type' => 'lab_pdf', 'fields' => [...$base, 'reference_range' => '']]);
+        self::assertNotNull($blankRange);
+        $rangeResult = SchemaValidator::validate($blankRange);
+        self::assertFalse($rangeResult->schemaValid);
+        self::assertSame('reference_range', $rangeResult->findings[0]->field);
+    }
+
+    /**
      * Matches SKILL.md's "Eval Output" example verbatim: toArray() is the
      * machine-readable shape the Week 2 eval gate consumes.
      */

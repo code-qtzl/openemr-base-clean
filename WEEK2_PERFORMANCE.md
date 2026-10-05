@@ -90,6 +90,23 @@ are different patients and question sets.
   synthetic documents, so this says the pipeline works, not how it handles
   messy scans.
 
+- **Multi-test lab panels** (added after the sample, measured on synthetic
+  panels, direct extraction): extraction output grows roughly linearly with the
+  number of test rows, about 260 output tokens per result (each carries its own
+  citation and bounding box).
+
+  | Rows | Latency | Cost | Output tokens | Results extracted |
+  |---|---|---|---|---|
+  | 6 | 17-18 s | $0.058 | ~1.8k | 6 / 6 |
+  | 20 | 45-49 s | $0.154 | ~5.6k | 20 / 20 |
+  | 45 | 94-97 s | $0.32 | ~12k | 45 / 45 |
+
+  Each result got its own distinct bounding box (row positions advance by about
+  one line height per row). The 50-result cap fits inside the 16,000-token
+  output limit with margin (about 13k at 260 tokens each), and the 300 s request
+  timeout covers the 45-row case at roughly a third of its budget. Larger or
+  denser panels would need the cap lowered or output split.
+
 ### Quality signal found during the run: verification fallbacks (diagnosed and fixed)
 
 Only **7 of 22** answers passed citation verification in the sample (chart 2/6,

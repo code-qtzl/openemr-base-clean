@@ -98,9 +98,9 @@ final class DocumentIngestionPipelineTest extends TestCase
         $result = $pipeline->ingest($pid, 'corr-pipeline-1', $payload, SchemaDocType::LabPdf);
 
         self::assertTrue($result->success);
-        self::assertNotNull($result->extractionId);
+        self::assertCount(1, $result->extractionIds);
         self::assertNotNull($result->documentId);
-        $this->extractionIds[] = $result->extractionId;
+        $this->extractionIds = [...$this->extractionIds, ...$result->extractionIds];
         $this->documentIds[] = $result->documentId;
 
         $documentRow = QueryUtils::querySingleRow(
@@ -112,7 +112,7 @@ final class DocumentIngestionPipelineTest extends TestCase
         self::assertSame($pid, (int) $documentRow['foreign_id']);
         self::assertSame('lab.pdf', $documentRow['name']);
 
-        $extractionRow = (new SqlExtractedDocumentStore())->find($result->extractionId);
+        $extractionRow = (new SqlExtractedDocumentStore())->find($result->extractionIds[0]);
         self::assertNotNull($extractionRow);
         self::assertSame($pid, $extractionRow->patientId);
         self::assertSame($result->documentId, $extractionRow->documentId);
@@ -133,7 +133,7 @@ final class DocumentIngestionPipelineTest extends TestCase
         $result = $pipeline->ingest($pid, 'corr-pipeline-2', $payload, SchemaDocType::LabPdf);
 
         self::assertFalse($result->success);
-        self::assertNull($result->extractionId);
+        self::assertSame([], $result->extractionIds);
         self::assertNull($result->documentId);
 
         $countRow = QueryUtils::querySingleRow(
@@ -200,6 +200,139 @@ final class DocumentIngestionPipelineTest extends TestCase
         self::assertIsArray($documentCountRow);
         self::assertIsNumeric($documentCountRow['c']);
         self::assertSame(0, (int) $documentCountRow['c']);
+    }
+
+    /**
+     * A lab panel is stored as one extraction row per test result, all linked
+     * to the single stored document, each with that document's id stamped into
+     * its own source_citation (so each result's source chip opens the PDF).
+     */
+    #[Test]
+    public function labPanelPersistsOneRowPerResultAllLinkedToTheOneDocument(): void
+    {
+        $pid = $this->installPrimaryPatient();
+        $pipeline = new DocumentIngestionPipeline(new DocumentExtractionService($this->panelFactory(3)));
+        $payload = DocumentPayload::fromBytes('panel.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        $result = $pipeline->ingest($pid, 'corr-pipeline-panel', $payload, SchemaDocType::LabPdf);
+
+        self::assertTrue($result->success);
+        self::assertCount(3, $result->extractionIds);
+        self::assertCount(3, $result->documents);
+        self::assertNotNull($result->documentId);
+        $this->extractionIds = [...$this->extractionIds, ...$result->extractionIds];
+        $this->documentIds[] = $result->documentId;
+
+        $store = new SqlExtractedDocumentStore();
+        foreach ($result->extractionIds as $index => $extractionId) {
+            $row = $store->find($extractionId);
+            self::assertNotNull($row);
+            self::assertSame($result->documentId, $row->documentId);
+
+            $stored = json_decode($row->fieldsJson, true, flags: JSON_THROW_ON_ERROR);
+            self::assertIsArray($stored);
+            self::assertIsArray($stored['fields']);
+            self::assertSame('test-' . $index, $stored['fields']['test_name']);
+            self::assertIsArray($stored['fields']['source_citation']);
+            self::assertSame((string) $result->documentId, $stored['fields']['source_citation']['document_id']);
+        }
+
+        $documentCount = QueryUtils::querySingleRow(
+            'SELECT COUNT(*) AS c FROM `documents` WHERE `foreign_id` = ?',
+            [$pid],
+        );
+        self::assertIsArray($documentCount);
+        self::assertIsNumeric($documentCount['c']);
+        self::assertSame(1, (int) $documentCount['c'], 'one stored document regardless of how many results it yielded');
+    }
+
+    /** All-or-nothing: one invalid result in a panel stores no rows and no document. */
+    #[Test]
+    public function labPanelWithOneInvalidResultPersistsNothing(): void
+    {
+        $pid = $this->installPrimaryPatient();
+        $results = $this->panelResults(3);
+        unset($results[1]['unit']);
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => $results],
+            JSON_THROW_ON_ERROR,
+        ));
+        $pipeline = new DocumentIngestionPipeline(new DocumentExtractionService($factory));
+        $payload = DocumentPayload::fromBytes('panel.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        $result = $pipeline->ingest($pid, 'corr-pipeline-panel-invalid', $payload, SchemaDocType::LabPdf);
+
+        self::assertFalse($result->success);
+        self::assertSame([], $result->extractionIds);
+        self::assertNotNull($result->extractionFailure);
+        self::assertNotNull($result->extractionFailure->validation);
+        self::assertSame(
+            ['results[1].unit'],
+            array_map(static fn ($finding): string => $finding->field, $result->extractionFailure->validation->findings),
+        );
+
+        $countRow = QueryUtils::querySingleRow(
+            'SELECT COUNT(*) AS c FROM `clinical_copilot_extracted_document` WHERE `pid` = ?',
+            [$pid],
+        );
+        self::assertIsArray($countRow);
+        self::assertIsNumeric($countRow['c']);
+        self::assertSame(0, (int) $countRow['c']);
+    }
+
+    /** A document-storage failure must roll back every row of a multi-result panel, not just one. */
+    #[Test]
+    public function documentStorageFailureRollsBackEveryRowOfAPanel(): void
+    {
+        $pid = $this->installPrimaryPatient();
+        $alwaysInvalidPathDocumentService = new class () extends DocumentService {
+            public function isValidPath(mixed $path): bool
+            {
+                return false;
+            }
+        };
+        $pipeline = new DocumentIngestionPipeline(
+            new DocumentExtractionService($this->panelFactory(3)),
+            new SqlExtractedDocumentStore(),
+            new DocumentAttachmentService($alwaysInvalidPathDocumentService),
+        );
+        $payload = DocumentPayload::fromBytes('panel.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        try {
+            $pipeline->ingest($pid, 'corr-pipeline-panel-rollback', $payload, SchemaDocType::LabPdf);
+            self::fail('Expected DocumentAttachmentService::store() to throw.');
+        } catch (RuntimeException) {
+            // Expected -- the invalid category path forces this.
+        }
+
+        $countRow = QueryUtils::querySingleRow(
+            'SELECT COUNT(*) AS c FROM `clinical_copilot_extracted_document` WHERE `pid` = ?',
+            [$pid],
+        );
+        self::assertIsArray($countRow);
+        self::assertIsNumeric($countRow['c']);
+        self::assertSame(0, (int) $countRow['c'], 'all rows of the panel must be rolled back');
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function panelResults(int $count): array
+    {
+        $results = [];
+        for ($i = 0; $i < $count; $i++) {
+            $results[] = [...self::VALID_LAB_FIELDS, 'test_name' => 'test-' . $i];
+        }
+
+        return $results;
+    }
+
+    private function panelFactory(int $count): ScriptedAnthropicClientFactory
+    {
+        return (new ScriptedAnthropicClientFactory())->finalText(json_encode(
+            ['doc_type' => 'lab_pdf', 'results' => $this->panelResults($count)],
+            JSON_THROW_ON_ERROR,
+        ));
     }
 
     private function installPrimaryPatient(): int

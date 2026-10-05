@@ -30,7 +30,13 @@ interface AnthropicClientFactory
      */
     public const CORRELATION_HEADER = 'X-Correlation-Id';
 
-    public function create(string $apiKey, string $correlationId): Client;
+    /**
+     * @param ?float $timeoutSeconds Per-request timeout; null uses the factory's
+     *                               default (sized for a chat turn). Document
+     *                               extraction passes a longer one because a
+     *                               full lab panel is a much larger response.
+     */
+    public function create(string $apiKey, string $correlationId, ?float $timeoutSeconds = null): Client;
 
     /**
      * Number of SDK-level retries the most recent create()'d client's calls

@@ -221,9 +221,13 @@ final class CopilotDocumentUploadControllerTest extends TestCase
         self::assertTrue($data['success']);
         self::assertSame('lab_pdf', $data['docType']);
         self::assertIsInt($data['documentId']);
-        self::assertIsInt($data['extractionId']);
+        self::assertIsArray($data['extractionIds']);
+        self::assertCount(1, $data['extractionIds']);
+        self::assertIsInt($data['extractionIds'][0]);
+        self::assertIsArray($data['results']);
+        self::assertCount(1, $data['results']);
         $this->documentIds[] = $data['documentId'];
-        $this->extractionIds[] = $data['extractionId'];
+        $this->extractionIds[] = $data['extractionIds'][0];
 
         $documentRow = QueryUtils::querySingleRow(
             'SELECT `foreign_id` FROM `documents` WHERE `id` = ?',
@@ -235,7 +239,7 @@ final class CopilotDocumentUploadControllerTest extends TestCase
 
         $extractionRow = QueryUtils::querySingleRow(
             'SELECT `pid`, `document_id` FROM `clinical_copilot_extracted_document` WHERE `id` = ?',
-            [$data['extractionId']],
+            [$data['extractionIds'][0]],
         );
         self::assertIsArray($extractionRow);
         self::assertIsNumeric($extractionRow['pid']);

@@ -45,6 +45,31 @@ class ExtractionPromptBuilderTest extends TestCase
         }
     }
 
+    public function testLabPromptAsksForOneResultObjectPerTestRowWithItsOwnBbox(): void
+    {
+        $prompt = ExtractionPromptBuilder::build(SchemaDocType::LabPdf);
+
+        self::assertStringContainsString('"results"', $prompt);
+        self::assertStringContainsString('ONE object per test result row', $prompt);
+        self::assertStringContainsString('each result gets its own box', $prompt);
+    }
+
+    public function testLabPromptTellsTheModelToLeaveANormalResultsFlagBlankNotInvent(): void
+    {
+        $prompt = ExtractionPromptBuilder::build(SchemaDocType::LabPdf);
+
+        self::assertStringContainsString('empty string', $prompt);
+        self::assertStringContainsString('never invent a flag', $prompt);
+    }
+
+    public function testIntakePromptKeepsTheSingleFieldsShapeAndNeverMentionsResults(): void
+    {
+        $prompt = ExtractionPromptBuilder::build(SchemaDocType::IntakeForm);
+
+        self::assertStringContainsString('"fields": {...}', $prompt);
+        self::assertStringNotContainsString('"results"', $prompt);
+    }
+
     public function testPromptMentionsAllFiveCitationSubFields(): void
     {
         $prompt = ExtractionPromptBuilder::build(SchemaDocType::LabPdf);

@@ -56,37 +56,51 @@ final class DocumentIngestionPipeline
         SchemaDocType $docType,
     ): DocumentIngestionResult {
         $extraction = $this->extractionService->extract($correlationId, $payload, $docType);
-        if (!$extraction->success || $extraction->document === null) {
+        if (!$extraction->success || $extraction->documents === []) {
             return DocumentIngestionResult::extractionFailed($extraction);
         }
 
-        $fieldsJson = json_encode([
-            'doc_type' => $extraction->document->docType->value,
-            'fields' => $extraction->document->fields,
-        ], JSON_THROW_ON_ERROR);
-
-        $extractionId = $this->store->save($patientId, $docType, $fieldsJson);
-
+        // One row per extracted result (a lab panel yields several), all
+        // pointing at the single stored document. A failure anywhere below
+        // rolls back every row inserted so far, so a failed ingest leaves
+        // nothing behind.
+        $extractionIds = [];
+        $stampedDocuments = [];
         try {
-            $documentId = $this->attachmentService->store($patientId, $docType, $payload, $extractionId);
-            $stampedFields = self::stampDocumentId($extraction->document->fields, $documentId);
-            $stampedFieldsJson = json_encode([
-                'doc_type' => $extraction->document->docType->value,
-                'fields' => $stampedFields,
-            ], JSON_THROW_ON_ERROR);
-            $this->store->attachDocumentId($extractionId, $documentId, $stampedFieldsJson);
+            foreach ($extraction->documents as $document) {
+                $extractionIds[] = $this->store->save($patientId, $docType, self::encode($document->docType, $document->fields));
+            }
+
+            $documentId = $this->attachmentService->store($patientId, $docType, $payload, $extractionIds[0]);
+
+            foreach ($extraction->documents as $index => $document) {
+                $stampedFields = self::stampDocumentId($document->fields, $documentId);
+                $this->store->attachDocumentId(
+                    $extractionIds[$index],
+                    $documentId,
+                    self::encode($document->docType, $stampedFields),
+                );
+
+                $stampedDocuments[] = ExtractedDocument::fromMixed([
+                    'doc_type' => $document->docType->value,
+                    'fields' => $stampedFields,
+                ]) ?? $document;
+            }
         } catch (Throwable $e) {
-            $this->rollBackExtraction($extractionId, $e);
+            $this->rollBackExtractions($extractionIds, $e);
 
             throw $e;
         }
 
-        $stampedDocument = ExtractedDocument::fromMixed([
-            'doc_type' => $extraction->document->docType->value,
-            'fields' => $stampedFields,
-        ]) ?? $extraction->document;
+        return DocumentIngestionResult::success($extractionIds, $documentId, $stampedDocuments, $extraction->telemetry);
+    }
 
-        return DocumentIngestionResult::success($extractionId, $documentId, $stampedDocument, $extraction->telemetry);
+    /**
+     * @param array<array-key, mixed> $fields
+     */
+    private static function encode(SchemaDocType $docType, array $fields): string
+    {
+        return json_encode(['doc_type' => $docType->value, 'fields' => $fields], JSON_THROW_ON_ERROR);
     }
 
     /**
@@ -113,26 +127,23 @@ final class DocumentIngestionPipeline
     }
 
     /**
-     * Best-effort compensating delete for the row save() already inserted,
-     * so a failed ingest leaves nothing behind. Never lets a cleanup
-     * failure mask the original error -- see class docblock. Catches only
-     * SqlQueryException (delete()'s one documented throw type), not a bare
-     * Throwable -- this project's PHPStan rules forbid swallowing Throwable
-     * because it would also catch a real \Error.
+     * @param list<int> $extractionIds
      */
-    private function rollBackExtraction(int $extractionId, Throwable $originalException): void
+    private function rollBackExtractions(array $extractionIds, Throwable $originalException): void
     {
-        try {
-            $this->store->delete($extractionId);
-        } catch (SqlQueryException $cleanupException) {
-            ServiceContainer::getLogger()->error(
-                'Clinical Co-Pilot failed to roll back an orphaned extraction row after a downstream failure',
-                [
-                    'extractionId' => $extractionId,
-                    'originalException' => $originalException,
-                    'cleanupException' => $cleanupException,
-                ],
-            );
+        foreach ($extractionIds as $extractionId) {
+            try {
+                $this->store->delete($extractionId);
+            } catch (SqlQueryException $cleanupException) {
+                ServiceContainer::getLogger()->error(
+                    'Clinical Co-Pilot failed to roll back an orphaned extraction row after a downstream failure',
+                    [
+                        'extractionId' => $extractionId,
+                        'originalException' => $originalException,
+                        'cleanupException' => $cleanupException,
+                    ],
+                );
+            }
         }
     }
 }

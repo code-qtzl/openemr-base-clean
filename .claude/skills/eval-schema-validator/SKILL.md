@@ -46,10 +46,13 @@ Not every required field is validated the same way -- a naive
 "non-empty" check across the board would wrongly fail legitimate data:
 
 - **Scalar fields** (`test_name`, `value`, `unit`, `reference_range`,
-  `collection_date`, `abnormal_flag`, `chief_concern`, `family_history`):
-  must be present and, if a string, non-empty after trimming. A non-string
-  scalar (e.g. a numeric `value`, or a boolean `abnormal_flag`) only needs
-  to be non-null.
+  `collection_date`, `chief_concern`, `family_history`): must be present
+  and, if a string, non-empty after trimming. A non-string scalar (e.g. a
+  numeric `value`) only needs to be non-null.
+- **`abnormal_flag`**: must be present and non-null, but an *empty string is
+  valid*. Lab reports print no flag for a normal result, so blank means "not
+  flagged"; failing it would reject most real panels. (The key being absent
+  is still a failure.)
 - **List fields** (`current_medications`, `allergies`): must be present
   and be an array. An *empty* array is valid and must pass -- "no known
   allergies" is real extracted content, not a missing field. Only an

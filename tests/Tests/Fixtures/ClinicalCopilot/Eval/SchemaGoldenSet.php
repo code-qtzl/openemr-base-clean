@@ -174,6 +174,53 @@ final class SchemaGoldenSet
                 tags: ['positive', 'lab_pdf', 'non_string_scalar'],
             ),
             new SchemaGoldenSetCase(
+                id: 'blank-abnormal-flag-on-a-normal-result-is-valid',
+                description: 'A lab_pdf result with a blank abnormal_flag -- labs print no flag for a normal value, so blank means not flagged.',
+                document: [
+                    'doc_type' => 'lab_pdf',
+                    'fields' => [
+                        'test_name' => 'Potassium',
+                        'value' => '4.2',
+                        'unit' => 'mmol/L',
+                        'reference_range' => '3.5-5.1',
+                        'collection_date' => '2026-09-14',
+                        'abnormal_flag' => '',
+                        'source_citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'lab-003',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'potassium',
+                            'quote_or_value' => '4.2',
+                        ],
+                    ],
+                ],
+                expectedSchemaValid: true,
+                tags: ['positive', 'lab_pdf', 'blank_flag'],
+            ),
+            new SchemaGoldenSetCase(
+                id: 'missing-abnormal-flag-key-still-fails',
+                description: 'A lab_pdf with no abnormal_flag key at all -- blank is valid, absent is not.',
+                document: [
+                    'doc_type' => 'lab_pdf',
+                    'fields' => [
+                        'test_name' => 'Potassium',
+                        'value' => '4.2',
+                        'unit' => 'mmol/L',
+                        'reference_range' => '3.5-5.1',
+                        'collection_date' => '2026-09-14',
+                        'source_citation' => [
+                            'source_type' => 'lab_pdf',
+                            'source_id' => 'lab-003',
+                            'page_or_section' => 'page_1',
+                            'field_or_chunk_id' => 'potassium',
+                            'quote_or_value' => '4.2',
+                        ],
+                    ],
+                ],
+                expectedSchemaValid: false,
+                tags: ['negative', 'lab_pdf', 'missing'],
+            ),
+            new SchemaGoldenSetCase(
                 id: 'structurally-empty-source-citation-fails',
                 description: 'A lab_pdf whose source_citation key is present but an empty object.',
                 document: [

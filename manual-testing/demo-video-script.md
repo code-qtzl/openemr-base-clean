@@ -193,12 +193,12 @@ alerts."
 **DO:** In the terminal run `composer eval-gate` (or show a recent passing run in the
 Actions tab). Then open PR #66.
 
-**EXPECT:** `Eval gate: PASS` with 52 golden-set cases and the five categories
+**EXPECT:** `Eval gate: PASS` with 54 golden-set cases and the five categories
 (`schema_valid`, `citation_present`, `factually_consistent`, `safe_refusal`,
 `no_phi_in_logs`) at 100%. PR #66 shows a **failed** `Eval Gate` check and a blocked
 merge.
 
-**SAY:** "A 52-case golden set with boolean rubrics gates every change. To prove it
+**SAY:** "A 54-case golden set with boolean rubrics gates every change. To prove it
 blocks regressions I opened a deliberately broken PR that weakened the citation
 check. The gate dropped that category below its threshold and GitHub blocked the
 merge. It also runs as a local pre-push hook."
@@ -206,9 +206,9 @@ merge. It also runs as a local pre-push hook."
 ### 9. Close (6:50-7:20)
 
 **SAY (honest limits, say them):** "Things I would call out: answers take around half
-a minute, longer when several workers run. Lab extraction currently stores one test
-per document, so a multi-test panel needs one document per result. The guideline
-corpus covers five drugs. And I found while testing that most answers were being
+a minute, longer when several workers run. A lab panel is split into one result per
+test, but the upload is all-or-nothing and capped at 50 results, so one malformed row
+rejects the whole panel. The guideline corpus covers five drugs. And I found while testing that most answers were being
 rejected by the citation verifier because of a schema inconsistency; I fixed it and
 the pass rate on a before/after test went from 3 of 8 to 8 of 8."
 

@@ -19,8 +19,21 @@ alongside it as a separate, less-trusted path.
   `SqlExtractedDocumentStore`). New table:
   `clinical_copilot_extracted_document`.
 - Two required document types: `lab_pdf`, `intake_form`.
-- A document-storage failure rolls back the already-inserted extraction row
-  rather than leaving an orphan.
+- **Multi-test lab panels.** A lab PDF is a panel, so the model returns one
+  flat result object per test row (`{"doc_type":"lab_pdf","results":[...]}`),
+  each with its own `source_citation` and `bbox`. The service splits these into
+  one `ExtractedDocument` per result and the pipeline stores one extraction row
+  per result, all linked to the single stored document and each stamped with
+  its own `document_id`. Every row keeps the original flat schema, so the
+  validator, the citation contract, the verifier and the model-facing tool did
+  not change shape; an intake form is still exactly one row. The outcome is
+  all-or-nothing (one invalid result rejects the upload, naming failures as
+  `results[i].field`), capped at `DocumentExtractionService::MAX_RESULTS` (50)
+  results, with `max_tokens` 16000 and a 300 s request timeout sized for a full
+  panel. `abnormal_flag` may be blank (reports print no flag for a normal
+  result); other scalars may not.
+- A document-storage failure rolls back every already-inserted extraction row
+  rather than leaving orphans.
 
 ## Hybrid RAG over a guideline corpus
 
@@ -69,8 +82,9 @@ AgentForge2 Core Requirement #5's "visual PDF bounding-box overlay":
 
 ## Eval-gate expansion
 
-- Golden set: 50 cases → 52 (2 new bbox-linkage negative cases added
-  alongside the overlay feature). Boolean rubrics across all 5 required
+- Golden set: 50 cases → 54 (2 bbox-linkage negative cases added alongside
+  the overlay feature, then 2 blank-`abnormal_flag` cases for multi-result lab
+  panels). Boolean rubrics across all 5 required
   categories (`schema_valid`, `citation_present`, `factually_consistent`,
   `safe_refusal`, `no_phi_in_logs`) — all currently at 100%.
 - `.github/workflows/eval-gate.yml` runs the gate on every push/PR to

@@ -221,6 +221,20 @@
         return parts.join(' | ');
     }
 
+    function summarizeResults(results) {
+        if (results.length === 1) {
+            return formatExtractedFields(results[0]);
+        }
+
+        return results.map(function (result) {
+            if (result && result.test_name) {
+                return result.test_name + ' ' + result.value + (result.unit ? ' ' + result.unit : '');
+            }
+
+            return formatExtractedFields(result);
+        }).join('; ');
+    }
+
     uploadSubmitBtn.addEventListener('click', function () {
         var file = fileInput.files && fileInput.files[0];
         if (!file) {
@@ -252,21 +266,32 @@
                 log.removeChild(pending);
 
                 if (data.success) {
-                    var summary = formatExtractedFields(data.fields);
+                    var results = Array.isArray(data.results) ? data.results : [];
+                    var summary = summarizeResults(results);
                     var msg = append(
-                        fileName + ' processed as ' + data.docType + '.' + (summary ? ' ' + summary : ''),
+                        fileName + ' processed as ' + data.docType
+                            + (results.length > 1 ? ' (' + results.length + ' results).' : '.')
+                            + (summary ? ' ' + summary : ''),
                         'upload'
                     );
 
-                    var sourceCitation = data.fields && data.fields.source_citation;
-                    if (data.documentId && sourceCitation) {
-                        appendSourceChips(msg, [{
-                            citation: {
-                                source_type: data.docType,
-                                document_id: String(data.documentId),
-                                bbox: sourceCitation.bbox || null
+                    // One source chip per extracted result, each with its own
+                    // bounding box (a lab panel yields one result per test row).
+                    if (data.documentId) {
+                        var chips = [];
+                        results.forEach(function (result) {
+                            var sourceCitation = result && result.source_citation;
+                            if (sourceCitation) {
+                                chips.push({
+                                    citation: {
+                                        source_type: data.docType,
+                                        document_id: String(data.documentId),
+                                        bbox: sourceCitation.bbox || null
+                                    }
+                                });
                             }
-                        }]);
+                        });
+                        appendSourceChips(msg, chips);
                     }
 
                     resetUploadPanel();
