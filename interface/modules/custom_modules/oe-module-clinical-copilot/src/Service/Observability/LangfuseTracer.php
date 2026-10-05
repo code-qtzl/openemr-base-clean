@@ -58,6 +58,11 @@ final readonly class LangfuseTracer
      * Builds and sends the trace for one completed co-pilot request. A
      * no-op when Langfuse credentials are not configured, same as
      * CopilotService itself being a no-op integration when unconfigured.
+     *
+     * @param list<TelemetryStep> $steps Sub-step timings (Voyage embed/
+     *                                   rerank, keyword search, ...), emitted
+     *                                   as child spans of the root. Attributes
+     *                                   are PHI-free counts/scores by contract.
      */
     public function traceAsk(
         string $correlationId,
@@ -68,6 +73,7 @@ final readonly class LangfuseTracer
         AskResult $result,
         float $requestStartedAt,
         float $requestEndedAt,
+        array $steps = [],
     ): void {
         $rootSpanId = Span::newSpanId();
 
@@ -113,6 +119,25 @@ final readonly class LangfuseTracer
                     // without parsing observation.output -- ALERTS.md's tool-failure-rate alert.
                     'langfuse.observation.level' => $toolCall->success ? 'DEFAULT' : 'ERROR',
                 ],
+            );
+        }
+
+        foreach ($steps as $step) {
+            $stepAttributes = [
+                'langfuse.observation.type' => 'span',
+                'langfuse.observation.level' => ($step->attributes['failed'] ?? false) === true ? 'ERROR' : 'DEFAULT',
+            ];
+            foreach ($step->attributes as $key => $value) {
+                $stepAttributes['langfuse.observation.metadata.' . $key] = $value;
+            }
+
+            $spans[] = new Span(
+                spanId: Span::newSpanId(),
+                parentSpanId: $rootSpanId,
+                name: $step->name,
+                startedAt: $step->startedAt,
+                endedAt: $step->endedAt,
+                attributes: $stepAttributes,
             );
         }
 

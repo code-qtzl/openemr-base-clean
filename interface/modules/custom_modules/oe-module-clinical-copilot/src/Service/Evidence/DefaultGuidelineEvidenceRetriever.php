@@ -29,6 +29,7 @@ use JsonException;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Core\OEEnvBag;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\StepRecorder;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceRow;
 use RuntimeException;
@@ -48,6 +49,7 @@ final readonly class DefaultGuidelineEvidenceRetriever implements GuidelineEvide
 
     public function __construct(
         private VoyageClientFactory $voyageClientFactory = new DefaultVoyageClientFactory(),
+        private StepRecorder $recorder = new StepRecorder(),
     ) {
     }
 
@@ -72,10 +74,25 @@ final readonly class DefaultGuidelineEvidenceRetriever implements GuidelineEvide
         }
 
         $voyage = $this->voyageClientFactory->create($apiKey, $correlationId);
-        $queryVector = $voyage->embed([$query], inputType: 'query')[0] ?? [];
+        // Step attributes are counts and scores only -- never the query or
+        // chunk text. The embed step's duration includes VoyageClient's
+        // 21s sleep on a 429, so a rate-limited call shows up as a long step.
+        $queryVector = $this->recorder->measure(
+            'voyage.embed',
+            fn (): array => $voyage->embed([$query], inputType: 'query')[0] ?? [],
+            static fn (array $vector): array => ['dimensions' => count($vector)],
+        );
 
-        $denseRanking = self::rankByCosineSimilarity($queryVector, $rows);
-        $sparseRanking = self::rankByFullText($query);
+        $denseRanking = $this->recorder->measure(
+            'retrieval.dense_rank',
+            static fn (): array => self::rankByCosineSimilarity($queryVector, $rows),
+            static fn (array $ranking): array => ['corpus_size' => count($ranking)],
+        );
+        $sparseRanking = $this->recorder->measure(
+            'retrieval.fulltext',
+            static fn (): array => self::rankByFullText($query),
+            static fn (array $ranking): array => ['hits' => count($ranking)],
+        );
         $fusedIds = self::fuseRankings($denseRanking, $sparseRanking, self::FUSED_CANDIDATE_LIMIT);
 
         $rowsById = [];
@@ -95,7 +112,20 @@ final readonly class DefaultGuidelineEvidenceRetriever implements GuidelineEvide
         }
 
         $chunkTexts = array_map(static fn (array $row): string => self::stringFromMixed($row['chunk_text'] ?? ''), $candidateRows);
-        $reranked = $voyage->rerank($query, $chunkTexts, self::FINAL_TOP_K);
+        $reranked = $this->recorder->measure(
+            'voyage.rerank',
+            fn (): array => $voyage->rerank($query, $chunkTexts, self::FINAL_TOP_K),
+            static function (array $ranked) use ($chunkTexts): array {
+                $scores = array_map(static fn (array $r): float => $r['relevanceScore'], $ranked);
+
+                return [
+                    'candidates' => count($chunkTexts),
+                    'returned' => count($ranked),
+                    'top_score' => $scores === [] ? 0.0 : round(max($scores), 4),
+                    'min_score' => $scores === [] ? 0.0 : round(min($scores), 4),
+                ];
+            },
+        );
 
         $evidenceRows = [];
         foreach ($reranked as $result) {

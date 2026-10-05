@@ -15,6 +15,7 @@ namespace OpenEMR\Tests\Isolated\Modules\ClinicalCopilot\Service\Observability;
 use GuzzleHttp\Psr7\Response;
 use OpenEMR\Modules\ClinicalCopilot\Service\AskResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\TelemetryStep;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
@@ -25,6 +26,7 @@ use RuntimeException;
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/AskResult.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/Span.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/ToolCallSpan.php';
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/TelemetryStep.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/LangfuseOtlpPayloadBuilder.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/LangfuseTracer.php';
 
@@ -107,6 +109,39 @@ class LangfuseTracerTest extends TestCase
         $rootSpanId = self::spanAt($spans, 0)['spanId'];
         self::assertSame($rootSpanId, self::spanAt($spans, 1)['parentSpanId']);
         self::assertSame($rootSpanId, self::spanAt($spans, 2)['parentSpanId']);
+    }
+
+    public function testStepsBecomeChildSpansWithMetadataAttributesAndFailedStepsAreLeveledError(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceAsk(
+            'c1',
+            27,
+            'admin',
+            'claude-opus-5',
+            'q',
+            self::stubResult(),
+            0.0,
+            1.0,
+            [
+                new TelemetryStep('voyage.rerank', 0.2, 0.5, ['candidates' => 20, 'top_score' => 0.91]),
+                new TelemetryStep('voyage.embed', 0.1, 0.2, ['failed' => true, 'exception' => RuntimeException::class]),
+            ],
+        );
+
+        $spans = self::extractSpans($transporter->captured);
+        self::assertSame(['clinical-copilot.ask', 'voyage.rerank', 'voyage.embed'], array_column($spans, 'name'));
+
+        $rootSpanId = self::spanAt($spans, 0)['spanId'];
+        self::assertSame($rootSpanId, self::spanAt($spans, 1)['parentSpanId']);
+
+        $encoded = json_encode($spans, JSON_THROW_ON_ERROR);
+        self::assertStringContainsString('langfuse.observation.metadata.candidates', $encoded);
+        self::assertStringContainsString('langfuse.observation.metadata.top_score', $encoded);
+        self::assertStringContainsString('ERROR', json_encode(self::spanAt($spans, 2), JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString('ERROR', json_encode(self::spanAt($spans, 1), JSON_THROW_ON_ERROR));
     }
 
     /**

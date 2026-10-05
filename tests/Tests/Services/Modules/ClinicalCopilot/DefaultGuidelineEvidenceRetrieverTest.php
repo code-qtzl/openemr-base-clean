@@ -25,6 +25,8 @@ require_once __DIR__ . '/../../../Fixtures/ClinicalCopilot/ClinicalCopilotFixtur
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\DefaultGuidelineEvidenceRetriever;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\StepRecorder;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\TelemetryStep;
 use OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceRow;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ClinicalCopilotFixtureManager;
 use OpenEMR\Tests\Fixtures\ClinicalCopilot\ScriptedVoyageClientFactory;
@@ -108,6 +110,51 @@ final class DefaultGuidelineEvidenceRetrieverTest extends TestCase
         self::assertSame('contraindications', $row->section);
         self::assertStringContainsString('renal impairment', (string) $row->chunkText);
         self::assertSame('0.9300', $row->rerankScore);
+    }
+
+    /**
+     * Core Requirement #7: retrieval hits and per-step latency must be
+     * observable. Attributes are counts/scores only -- never the query or
+     * chunk text, which would put clinical content into Langfuse.
+     */
+    #[Test]
+    public function retrievalRecordsPhiFreeStepsForEmbedKeywordAndRerank(): void
+    {
+        $this->fixtures->seedGuidelineChunk(
+            self::RELEVANT_SOURCE,
+            'Metformin Hydrochloride Tablets -- FDA Label',
+            'contraindications',
+            0,
+            'Metformin is contraindicated in patients with severe renal impairment.',
+            [1.0, 0.0, 0.0],
+        );
+
+        $factory = new ScriptedVoyageClientFactory(
+            embedResponses: [['data' => [['index' => 0, 'embedding' => [1.0, 0.0, 0.0]]]]],
+            rerankResponses: [['data' => [['index' => 0, 'relevance_score' => 0.93]]]],
+        );
+        $recorder = new StepRecorder();
+
+        (new DefaultGuidelineEvidenceRetriever($factory, $recorder))
+            ->retrieve('metformin renal impairment', 'test-correlation-retriever-steps');
+
+        $byName = [];
+        foreach ($recorder->steps() as $step) {
+            self::assertInstanceOf(TelemetryStep::class, $step);
+            $byName[$step->name] = $step;
+        }
+
+        self::assertSame(
+            ['voyage.embed', 'retrieval.dense_rank', 'retrieval.fulltext', 'voyage.rerank'],
+            array_keys($byName),
+        );
+        self::assertSame(3, $byName['voyage.embed']->attributes['dimensions']);
+        self::assertSame(1, $byName['voyage.rerank']->attributes['returned']);
+        self::assertSame(0.93, $byName['voyage.rerank']->attributes['top_score']);
+
+        $encoded = json_encode(array_map(static fn (TelemetryStep $s): array => $s->attributes, $recorder->steps()), JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString('metformin', strtolower($encoded));
+        self::assertStringNotContainsString('renal', strtolower($encoded));
     }
 
     /**

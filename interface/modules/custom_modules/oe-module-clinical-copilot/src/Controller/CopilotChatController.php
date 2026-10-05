@@ -58,7 +58,9 @@ use OpenEMR\Modules\ClinicalCopilot\Service\Conversation\SqlConversationStore;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotInteractionLogger;
 use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
+use OpenEMR\Modules\ClinicalCopilot\Service\Evidence\DefaultGuidelineEvidenceRetriever;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\StepRecorder;
 use OpenEMR\Modules\ClinicalCopilot\Service\SessionRateLimiter;
 use OpenEMR\Modules\ClinicalCopilot\Service\Supervisor\Supervisor;
 use Ramsey\Uuid\Uuid;
@@ -129,11 +131,13 @@ final readonly class CopilotChatController
         $this->beginHeartbeat();
 
         try {
+            $recorder = new StepRecorder();
             $tools = new ChartContextTools(
                 $patientId,
                 $authUser,
                 $this->sessionString($session->get('authProvider')),
                 $correlationId,
+                guidelineRetriever: new DefaultGuidelineEvidenceRetriever(recorder: $recorder),
             );
 
             $history = $sessionUuid !== ''
@@ -152,6 +156,7 @@ final readonly class CopilotChatController
                 $result,
                 $startedAt,
                 $endedAt,
+                $recorder->steps(),
             );
 
             $this->interactionLogger->logSuccess(
