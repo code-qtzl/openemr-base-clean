@@ -433,6 +433,50 @@ final class SupervisorTest extends TestCase
         self::assertSame(ResponseVerifier::FALLBACK_REPLY, $result->reply);
     }
 
+    /**
+     * Regression: Supervisor::consultWorker once received the worker's
+     * results already computed, so its timer started after the work was
+     * done and every handoff/tool span read ~0 ms -- hiding retrieval time
+     * (including Voyage retry sleeps) inside the request total. A retriever
+     * that takes a known time must now show up in the handoff span.
+     */
+    #[Test]
+    public function handoffSpanCoversTheWorkersActualDuration(): void
+    {
+        $slowRetriever = new class implements GuidelineEvidenceRetriever {
+            public function retrieve(string $query, string $correlationId): GuidelineEvidenceResult
+            {
+                usleep(25_000);
+
+                return GuidelineEvidenceResult::ok([]);
+            }
+        };
+
+        $factory = (new ScriptedAnthropicClientFactory())
+            ->toolUse('consult_evidence_worker', ['query' => 'metformin renal impairment'])
+            ->submitAnswer(['insufficient_information' => true, 'claims' => []])
+            ->finalText();
+
+        $result = (new Supervisor($this->tools($slowRetriever), $factory))
+            ->ask('Is metformin safe in renal impairment?', 'test-correlation-handoff-timing');
+
+        $handoff = null;
+        $tool = null;
+        foreach ($result->toolCalls as $span) {
+            if ($span->name === 'handoff:consult_evidence_worker') {
+                $handoff = $span;
+            }
+            if ($span->name === 'search_guideline_evidence') {
+                $tool = $span;
+            }
+        }
+
+        self::assertNotNull($handoff);
+        self::assertNotNull($tool);
+        self::assertGreaterThanOrEqual(0.025, $handoff->endedAt - $handoff->startedAt);
+        self::assertGreaterThanOrEqual(0.025, $tool->endedAt - $tool->startedAt);
+    }
+
     private function tools(?GuidelineEvidenceRetriever $guidelineRetriever = null): ChartContextTools
     {
         return new ChartContextTools(

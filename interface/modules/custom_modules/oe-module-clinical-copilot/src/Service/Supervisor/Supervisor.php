@@ -46,6 +46,7 @@ declare(strict_types=1);
 namespace OpenEMR\Modules\ClinicalCopilot\Service\Supervisor;
 
 use Anthropic\Lib\Tools\BetaRunnableTool;
+use Closure;
 use OpenEMR\Modules\ClinicalCopilot\Service\AnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\AskResult;
 use OpenEMR\Modules\ClinicalCopilot\Service\ChartContextTools;
@@ -164,7 +165,7 @@ final readonly class Supervisor
                 run: function (array $input) use (&$toolsUsed, &$toolRowCounts, &$toolCallSpans): string {
                     return $this->consultWorker(
                         self::CONSULT_CHART_WORKER_TOOL,
-                        $this->chartWorker->consult(),
+                        fn (): array => $this->chartWorker->consult(),
                         $toolsUsed,
                         $toolRowCounts,
                         $toolCallSpans,
@@ -176,7 +177,7 @@ final readonly class Supervisor
                 run: function (array $input) use (&$toolsUsed, &$toolRowCounts, &$toolCallSpans): string {
                     return $this->consultWorker(
                         self::CONSULT_DOCUMENT_WORKER_TOOL,
-                        $this->documentWorker->consult(),
+                        fn (): array => $this->documentWorker->consult(),
                         $toolsUsed,
                         $toolRowCounts,
                         $toolCallSpans,
@@ -196,7 +197,7 @@ final readonly class Supervisor
 
                     return $this->consultWorker(
                         self::CONSULT_EVIDENCE_WORKER_TOOL,
-                        $this->evidenceWorker->consult($query),
+                        fn (): array => $this->evidenceWorker->consult($query),
                         $toolsUsed,
                         $toolRowCounts,
                         $toolCallSpans,
@@ -261,29 +262,36 @@ final readonly class Supervisor
      * handoff" AgentForge2 asks for, visible in Langfuse alongside the
      * granular spans it fanned out to.
      *
-     * @param array<string, \OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult> $results
+     * @param Closure(): array<string, \OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult> $results
      * @param list<string> $toolsUsed
      * @param array<string, int> $toolRowCounts
      * @param list<ToolCallSpan> $toolCallSpans
      */
     private function consultWorker(
         string $workerToolName,
-        array $results,
+        Closure $consult,
         array &$toolsUsed,
         array &$toolRowCounts,
         array &$toolCallSpans,
     ): string {
+        // The worker must run *inside* the timed window: passing its result in
+        // already computed (as this method once did) made every handoff and
+        // tool span bracket nothing and read ~0 ms. A worker's tools run
+        // sequentially behind one consult() call, so each tool span here
+        // shares the worker's window rather than carrying its own duration.
         $handoffStartedAt = microtime(true);
+        $results = $consult();
+        $handoffEndedAt = microtime(true);
 
         $bundle = [];
         foreach ($results as $name => $result) {
             $toolsUsed[] = $name;
             $toolRowCounts[$name] = ($toolRowCounts[$name] ?? 0) + $result->count();
-            $toolCallSpans[] = new ToolCallSpan($name, $handoffStartedAt, microtime(true), $result->ok);
+            $toolCallSpans[] = new ToolCallSpan($name, $handoffStartedAt, $handoffEndedAt, $result->ok);
             $bundle[$name] = $result->toArray();
         }
 
-        $toolCallSpans[] = new ToolCallSpan("handoff:{$workerToolName}", $handoffStartedAt, microtime(true), true);
+        $toolCallSpans[] = new ToolCallSpan("handoff:{$workerToolName}", $handoffStartedAt, $handoffEndedAt, true);
 
         return self::wrapUntrustedToolResult(json_encode($bundle, JSON_THROW_ON_ERROR));
     }

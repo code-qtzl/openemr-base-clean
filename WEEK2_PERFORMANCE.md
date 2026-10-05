@@ -37,13 +37,24 @@ Total real-API spend recorded in Langfuse across the window: **$5.81**
 
 ## Per-step latency
 
-| Step | Observed | Notes |
-|---|---|---|
-| `anthropic.messages` generation | p50 ≈ 28 s on Week 2 turns; p95 15.0 s across all 493 generations | Dominates the turn: end-to-end latency ≈ generation latency. |
-| Chart tools (`get_*`) | p50 ≈ 1 ms, max 52 ms | Local DB reads. |
-| `handoff:consult_*_worker` | ≤ 1 ms | Routing decision is instantaneous; the cost is the model call. |
-| `search_guideline_evidence` | ~0 ms recorded | **Not trustworthy**: see gaps. |
-| `get_extracted_documents` | p50 1 ms, max 4 ms | DB read of stored extraction. |
+**Per-step timing in these traces is not reliable, so no step breakdown is
+claimed.** Two measurement issues in the instrumentation that produced them:
+
+- The single `anthropic.messages` generation span is synthesized after the
+  fact and spans the **entire request** (`LangfuseTracer::traceAsk` sets its
+  start/end to the request start/end). It includes tool time, retrieval and
+  any Voyage retry sleeps, so it cannot be read as model-only latency.
+- On the Supervisor path, `Supervisor::consultWorker` starts its timer
+  *after* the worker's `consult()` has already run (the call is evaluated as
+  an argument), so `handoff:*` spans and the `get_*` / `search_guideline_evidence`
+  / `get_extracted_documents` spans bracket nothing and read about 0-1 ms.
+  The Week 1 path (`CopilotService`) times its tool calls correctly; the
+  Supervisor path, the live Week 2 entry point, does not.
+
+What can be said: end-to-end latency and per-trace token usage and cost
+(table above) are accurate, because they come from the request wall clock and
+the Anthropic usage totals. How that time splits between model calls,
+retrieval and Voyage is unknown until the spans below are fixed.
 
 ## What this says
 
@@ -53,9 +64,8 @@ Total real-API spend recorded in Langfuse across the window: **$5.81**
    chart-worker-only turns average ~25k, so the Supervisor path itself
    roughly doubles input before documents or guideline chunks are added; the
    exact cause was not isolated from these traces.
-2. **Routing overhead is negligible**: handoff spans take ≤ 1 ms. The
-   Supervisor's cost is the extra context its workers return, not the
-   hand-offs themselves.
+2. **Routing overhead is not measured**: handoff spans currently time
+   nothing (see above), so no claim is made about it either way.
 3. **Mixed questions are the worst case**: 42.6 s p50 and $0.27 per question
    when all three workers run. That is above a comfortable interactive
    threshold for a clinician mid-visit.
@@ -72,8 +82,10 @@ Total real-API spend recorded in Langfuse across the window: **$5.81**
   captured here. 14 intake-form extractions exist in the dev DB, none from a
   lab PDF, and none have timing recorded.
 - **No Voyage telemetry**: embedding and rerank calls are not separate spans,
-  so `search_guideline_evidence`'s ~0 ms is an instant marker, not the real
-  retrieval time. The Voyage cost is also absent from the totals above.
+  and `search_guideline_evidence`'s ~0 ms is an artifact of the timer bug
+  above. The Voyage client also sleeps 21 s on a 429 (free-tier rate limit),
+  which would sit invisibly inside the request total. Voyage cost is absent
+  from the totals above.
 - **Not in traces**: extraction confidence, retrieval-hit counts and eval
   outcome per encounter (Core Requirement #7) are not visible in the
   observation metadata that was exported.
