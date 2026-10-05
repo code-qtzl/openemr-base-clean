@@ -90,19 +90,42 @@ are different patients and question sets.
   synthetic documents, so this says the pipeline works, not how it handles
   messy scans.
 
-### Quality signal found during the run: verification fallbacks
+### Quality signal found during the run: verification fallbacks (diagnosed and fixed)
 
-Only **7 of 22** answers passed citation verification (chart 2/6, document
-1/6, evidence 3/5, mixed 1/5); the rest returned the safe fallback reply. The
-dev DB's own log shows the same pattern from earlier sessions (6 passed, 8
-failed in the previous three days), so this predates the span work. A
-diagnostic re-run showed it is non-deterministic: the identical medications
-question failed once with `claim cites 'get_medications' with an incomplete
-citation` and passed on the next try. So the verifier is correctly rejecting
-claims where the model omits part of the citation, but at this rate the demo
-will often show the fallback reply instead of an answer. Not diagnosed further
-here: which citation field is omitted, and whether a stricter prompt or a
-single retry on failure fixes it. Worth a dedicated look before grading.
+Only **7 of 22** answers passed citation verification in the sample (chart 2/6,
+document 1/6, evidence 3/5, mixed 1/5); the rest returned the safe fallback
+reply. The dev DB's own log showed the same pattern from earlier sessions (6
+passed, 8 failed in the previous three days), so it predates the span work.
+
+**Root cause.** The `submit_answer` tool description told the model that
+`field_or_chunk_id` is required "for every source_type except chart_tool", and
+the JSON schema did not list it as required. `ResponseVerifier` (correctly,
+per the spec's minimum citation shape) requires it for every citation, chart
+tool included, and rejects the whole answer if any one claim lacks it. So the
+model was being told it could omit a field the verifier then failed it for
+omitting. `ResponseVerifier` now reports the missing field names in its
+reason, and a baseline probe confirmed it: in 8 questions, 5 failed and **all
+5 were `missing: field_or_chunk_id`** on a chart-tool citation.
+
+**Fix.** The tool description and the `field_or_chunk_id` property now say it
+is required for every source type and give per-tool examples of what to put
+(for chart tools, the name of the quoted row field, e.g. `drug`, `value`,
+`title`); the field was added to the schema's `required` list. The verifier
+stays strict.
+
+**Result** (same 8 questions, same patient, run before and after the change;
+2 chart, 2 document, 2 evidence, 2 mixed):
+
+| | Passed | Real cited answers | Cost |
+|---|---|---|---|
+| Baseline | 3 / 8 | 2 of the 3 | $2.55 |
+| After fix | **8 / 8** | 7 of the 8 | $2.67 |
+
+"Passed" includes an honest "insufficient information" answer (0 claims),
+which happened once in each arm on an evidence question the guideline corpus
+does not cover. n = 8 per arm and the model is stochastic, so treat the exact
+rates as indicative; the mechanism (a single missing field, identical in every
+failure) is what makes the fix credible.
 
 ## Per-step latency (initial data, superseded by the live sample above)
 
@@ -182,8 +205,8 @@ improved.
 
 ## Suggested follow-ups
 
-- Investigate the 7/22 verification pass rate (log which citation field is
-  missing; try a prompt tightening or one retry before falling back).
+- Re-run the full 22-question sample after the verification fix to confirm the
+  pass rate over a larger set.
 - Remove the Voyage rate-limit stalls (payment method on the Voyage account, or
   cache query embeddings).
 - Record Voyage token usage and per-call Anthropic request timings so model time
