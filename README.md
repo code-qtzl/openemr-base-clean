@@ -33,7 +33,7 @@ This fork adds a Clinical Co-Pilot: a tool-calling chat agent embedded in the pa
   ```
   App at http://localhost:8300/ (or https://localhost:9300/), login `admin` / `pass`. Copy [.env.example](.env.example) to `docker/development-easy/.env` and set `OPENEMR__COPILOT_API_KEY` (Anthropic, required to enable the co-pilot) and `OPENEMR__VOYAGE_API_KEY` (Voyage, required for guideline retrieval) — see `CLAUDE.md`'s "Local Development" section for the full workflow, including tests and code-quality checks.
 - **Eval gate**: `composer eval-gate` (or `openemr-cmd e 'cd /var/www/localhost/htdocs/openemr && composer eval-gate'`) scores the 52-case golden set across the 5 boolean-rubric categories and fails on a >5-point regression. It runs in CI ([eval-gate.yml](.github/workflows/eval-gate.yml)) and locally as a pre-push hook — install with `sh .githooks/install.sh`.
-- **More**: [KEY_METRICS.md](KEY_METRICS.md) (success metrics), [EVAL_RESULTS.md](EVAL_RESULTS.md) (test coverage), [USERS.md](USERS.md) (target user), [manual-testing/](manual-testing/) (live testing guides), [AgentForge2.md](AgentForge2.md) (the Week 2 assignment spec this was built against).
+- **More**: [KEY_METRICS.md](KEY_METRICS.md) (success metrics), [WEEK2_PERFORMANCE.md](WEEK2_PERFORMANCE.md) (Week 2 latency/cost from real traces), [EVAL_RESULTS.md](EVAL_RESULTS.md) (test coverage), [USERS.md](USERS.md) (target user), [manual-testing/](manual-testing/) (live testing guides), [AgentForge2.md](AgentForge2.md) (the Week 2 assignment spec this was built against).
 
 ### Contributing
 
