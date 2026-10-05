@@ -35,7 +35,76 @@ Week 1 baselines (mocked-LLM capacity, per-question spend, scaling) stay in
 Total real-API spend recorded in Langfuse across the window: **$5.81**
 ($3.59 Week 1 style, $2.22 Week 2).
 
-## Per-step latency
+## Live sample run (2026-10-05, after the span fixes)
+
+A controlled run through the same code path as the controllers (Supervisor,
+`StepRecorder`, `LangfuseTracer`), so step timings come from the fixed spans.
+Traces are in Langfuse under environment `week2-sample`. Patient: the dev
+stack's chart-richest synthetic patient (pid 39, 4 synthetic documents
+extracted: 2 intake forms from `intake-forms/`, 2 generated lab PDFs from
+2026-03 and 2026-09 marked "SYNTHETIC TEST DATA"). 22 questions: 6 chart-only,
+6 document, 5 evidence, 5 mixed. Spend: about $7.4 including the 4 extractions
+and a 2-question diagnostic.
+
+### End-to-end, per question
+
+| Category | n | Latency p50 | p95 | Cost mean | Avg tokens in / out |
+|---|---|---|---|---|---|
+| Chart-only | 6 | 31.2 s | 45.7 s | $0.286 | 42,833 / 2,870 |
+| Document | 6 | 27.2 s | 30.1 s | $0.235 | 36,479 / 2,092 |
+| Evidence | 5 | 30.9 s | 80.1 s | $0.309 | 49,531 / 2,447 |
+| Mixed | 5 | 63.2 s | 107.7 s | $0.412 | 59,502 / 4,578 |
+| **All** | 22 | **30.9 s** | 80.1 s | **$0.306** | 46,411 / 2,950 |
+
+These are higher than the historical Week 2 table above ($0.20, 27.9 s p50):
+this patient has a large chart (every chart tool returns up to its 60-row cap),
+and the questions are broader. Do not compare the two tables as a trend; they
+are different patients and question sets.
+
+### Measured per-step latency (Langfuse, 17 retrieval calls)
+
+| Step | n | p50 | p95 | Max |
+|---|---|---|---|---|
+| `voyage.embed` | 17 | 0.20 s | 42.5 s | 42.5 s |
+| `voyage.rerank` | 17 | 0.14 s | 0.22 s | 0.22 s |
+| `retrieval.dense_rank` | 17 | 9 ms | 11 ms | 11 ms |
+| `retrieval.fulltext` | 17 | 1 ms | 3 ms | 3 ms |
+| `handoff:consult_evidence_worker` | 17 | 0.36 s | 42.7 s | 42.7 s |
+| `handoff:consult_chart_worker` | 21 | 13 ms | 16 ms | 44 ms |
+| `handoff:consult_document_worker` | 17 | 2 ms | 5 ms | 5 ms |
+| Extraction (VLM call) | 4 | 9.2 s | 12.0 s | 12.0 s |
+
+- **Retrieval and routing are cheap when Voyage answers**: median 2.2% of a
+  retrieval turn (1.7% excluding rate-limit stalls). Handoffs themselves cost
+  milliseconds. Roughly 97%+ of a typical turn is therefore the Anthropic
+  calls (inferred as the remainder; the chat `anthropic.messages` generation
+  span still covers the whole request, so model time is not measured directly).
+- **Voyage rate limiting is the one real retrieval risk**: 3 of 17 embed calls
+  stalled at 21.3 s, 42.4 s and 42.5 s, i.e. one or two of `VoyageClient`'s
+  21 s sleeps on HTTP 429 (free-tier 3 requests/minute). They hit 3 of 10
+  retrieval turns and account for the 80.1 s and 107.7 s outliers. Adding a
+  payment method to the Voyage account lifts this limit.
+- **Extraction**: intake forms 6.6 to 7.7 s ($0.026-$0.031), lab PDFs 10.6 to
+  12.0 s ($0.034-$0.037); about 2.4-2.5k input and 0.56-0.98k output tokens
+  each. Required-field completeness was 1.0 on all four. These are clean
+  synthetic documents, so this says the pipeline works, not how it handles
+  messy scans.
+
+### Quality signal found during the run: verification fallbacks
+
+Only **7 of 22** answers passed citation verification (chart 2/6, document
+1/6, evidence 3/5, mixed 1/5); the rest returned the safe fallback reply. The
+dev DB's own log shows the same pattern from earlier sessions (6 passed, 8
+failed in the previous three days), so this predates the span work. A
+diagnostic re-run showed it is non-deterministic: the identical medications
+question failed once with `claim cites 'get_medications' with an incomplete
+citation` and passed on the next try. So the verifier is correctly rejecting
+claims where the model omits part of the citation, but at this rate the demo
+will often show the fallback reply instead of an answer. Not diagnosed further
+here: which citation field is omitted, and whether a stricter prompt or a
+single retry on failure fixes it. Worth a dedicated look before grading.
+
+## Per-step latency (initial data, superseded by the live sample above)
 
 **Per-step timing in these traces is not reliable, so no step breakdown is
 claimed.** Two measurement issues in the instrumentation that produced them:
@@ -56,7 +125,7 @@ What can be said: end-to-end latency and per-trace token usage and cost
 the Anthropic usage totals. How that time splits between model calls,
 retrieval and Voyage is unknown until the spans below are fixed.
 
-## What this says
+## What the initial data says
 
 1. **Week 2 roughly doubles latency and cost versus Week 1**: p50 27.9 s vs
    11.3 s and $0.20 vs $0.09 per question. The driver is context size, not
@@ -72,7 +141,7 @@ retrieval and Voyage is unknown until the spans below are fixed.
 4. **Cost is small in absolute terms**: even the worst observed question was
    $0.31. At the Week 2 mean, 1,000 questions ≈ $202.
 
-## Gaps and caveats (read before citing)
+## Gaps in the initial data (several now fixed; see the instrumentation section)
 
 - **Small sample**: 11 real Week 2 traces. p95 over n = 11 is effectively the
   max, and the document-worker and evidence-worker rows are n = 1.
@@ -93,32 +162,31 @@ retrieval and Voyage is unknown until the spans below are fixed.
   behaviour is covered separately in PERFORMANCE_BASELINE.md.
 - Cost comes from Langfuse's price table, not Anthropic's invoice.
 
-## Instrumentation added after this report
+## Instrumentation added after the initial data
 
-Commits `d907dd1be`, `6b021ac96` and the extraction-trace commit that follows
-them fix the gaps above for **new** traffic. The numbers in this report were
-captured before them and are not retroactively improved.
+Commits `d907dd1be`, `6b021ac96`, `5709993cb` and `cfff1cf52` fixed the gaps in
+the initial section; the live sample above is the first data collected with
+them. The initial historical tables are kept as-is and are not retroactively
+improved.
 
 - Handoff and tool spans now time the worker's real work.
 - `voyage.embed`, `retrieval.dense_rank`, `retrieval.fulltext` and
-  `voyage.rerank` appear as child spans with counts and scores only. A Voyage
-  429 retry sleep (21 s) shows up as a long `voyage.embed` or `voyage.rerank`.
-- Document extraction now has its own trace (`clinical-copilot.extract`):
-  model, tokens, latency, `schema_valid`, and **extraction completeness**
-  (required schema fields present and well-formed, out of the doc type's
-  required fields, plus the missing field names). This is a deterministic proxy
-  for "extraction confidence", not a model-reported score.
-- Still not captured: Voyage token/cost, per-call Anthropic HTTP timings
-  (the `anthropic.messages` generation on chat traces still spans the whole
-  request), and retrieval-hit counts on the trace root.
+  `voyage.rerank` are child spans with counts and scores only.
+- Document extraction has its own trace (`clinical-copilot.extract`) with model,
+  tokens, latency, `schema_valid` and required-field completeness, a
+  deterministic proxy for extraction confidence rather than a model-reported
+  score.
+- Still not captured: Voyage token usage and cost, per-call Anthropic HTTP
+  timings (so model time is inferred, not measured), and retrieval-hit counts on
+  the trace root.
 
 ## Suggested follow-ups
 
-- Re-run a larger real-API sample (about 20-30 mixed questions plus a few
-  lab-PDF and intake uploads) now that the spans exist, and replace this
-  report's per-step section with measured values. A few dollars at the Week 2
-  mean of about $0.20 per question.
-- Record Voyage token usage and per-call Anthropic request timings so the
-  generation span can be split from tool and retrieval time.
-- Look at trimming Week 2 context (fewer or shorter guideline chunks, a summary
-  of extracted fields) to pull the 28k-token average down.
+- Investigate the 7/22 verification pass rate (log which citation field is
+  missing; try a prompt tightening or one retry before falling back).
+- Remove the Voyage rate-limit stalls (payment method on the Voyage account, or
+  cache query embeddings).
+- Record Voyage token usage and per-call Anthropic request timings so model time
+  is measured rather than inferred.
+- Trim Week 2 context (fewer or shorter guideline chunks, a summary of extracted
+  fields); turns send 36k-60k input tokens.
