@@ -14,6 +14,8 @@ namespace OpenEMR\Tests\Isolated\Modules\ClinicalCopilot\Service\Observability;
 
 use GuzzleHttp\Psr7\Response;
 use OpenEMR\Modules\ClinicalCopilot\Service\AskResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
+use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\ExtractionTelemetry;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\TelemetryStep;
 use OpenEMR\Modules\ClinicalCopilot\Service\Observability\ToolCallSpan;
@@ -24,6 +26,8 @@ use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
 
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/AskResult.php';
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Schema/SchemaDocType.php';
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/ExtractionTelemetry.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/Span.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/ToolCallSpan.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Observability/TelemetryStep.php';
@@ -142,6 +146,40 @@ class LangfuseTracerTest extends TestCase
         self::assertStringContainsString('langfuse.observation.metadata.top_score', $encoded);
         self::assertStringContainsString('ERROR', json_encode(self::spanAt($spans, 2), JSON_THROW_ON_ERROR));
         self::assertStringNotContainsString('ERROR', json_encode(self::spanAt($spans, 1), JSON_THROW_ON_ERROR));
+    }
+
+    public function testTraceExtractionEmitsRootAndGenerationSpansWithCompletenessAndNoExtractedValues(): void
+    {
+        $transporter = self::capturingTransporter();
+        $tracer = new LangfuseTracer(publicKey: 'pk-lf-test', secretKey: 'sk-lf-test', transporter: $transporter);
+
+        $tracer->traceExtraction(
+            'c1',
+            27,
+            'admin',
+            SchemaDocType::LabPdf,
+            false,
+            false,
+            null,
+            new ExtractionTelemetry('claude-opus-5', 0.1, 0.9, 1200, 340, 7, ['unit', 'reference_range']),
+            0.0,
+            1.0,
+        );
+
+        $spans = self::extractSpans($transporter->captured);
+        self::assertSame(['clinical-copilot.extract', 'anthropic.messages'], array_column($spans, 'name'));
+        self::assertSame(self::spanAt($spans, 0)['spanId'], self::spanAt($spans, 1)['parentSpanId']);
+
+        $root = self::attributesOf(self::spanAt($spans, 0));
+        self::assertSame('lab_pdf', $root['langfuse.trace.metadata.doc_type']);
+        self::assertSame(5, $root['langfuse.trace.metadata.fields_present']);
+        self::assertSame(0.7143, $root['langfuse.trace.metadata.completeness']);
+        self::assertSame('unit,reference_range', $root['langfuse.trace.metadata.missing_fields']);
+        self::assertSame('WARNING', $root['langfuse.observation.level']);
+
+        $generation = self::attributesOf(self::spanAt($spans, 1));
+        self::assertSame(1200, $generation['gen_ai.usage.input_tokens']);
+        self::assertSame(340, $generation['gen_ai.usage.output_tokens']);
     }
 
     /**

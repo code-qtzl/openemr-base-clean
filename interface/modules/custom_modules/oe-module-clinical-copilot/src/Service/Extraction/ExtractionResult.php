@@ -28,7 +28,13 @@ final readonly class ExtractionResult
         public ?ExtractedDocument $document,
         public ?SchemaValidationResult $validation,
         public ?string $failureReason,
+        public ?ExtractionTelemetry $telemetry = null,
     ) {
+    }
+
+    public function withTelemetry(ExtractionTelemetry $telemetry): self
+    {
+        return new self($this->success, $this->document, $this->validation, $this->failureReason, $telemetry);
     }
 
     public static function success(ExtractedDocument $document): self

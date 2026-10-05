@@ -24,12 +24,17 @@ final readonly class DocumentIngestionResult
         public ?int $documentId,
         public ?ExtractedDocument $document,
         public ?ExtractionResult $extractionFailure,
+        public ?ExtractionTelemetry $telemetry = null,
     ) {
     }
 
-    public static function success(int $extractionId, int $documentId, ExtractedDocument $document): self
-    {
-        return new self(true, $extractionId, $documentId, $document, null);
+    public static function success(
+        int $extractionId,
+        int $documentId,
+        ExtractedDocument $document,
+        ?ExtractionTelemetry $telemetry = null,
+    ): self {
+        return new self(true, $extractionId, $documentId, $document, null, $telemetry);
     }
 
     public static function extractionFailed(ExtractionResult $extractionResult): self

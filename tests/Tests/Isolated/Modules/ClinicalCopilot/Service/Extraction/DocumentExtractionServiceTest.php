@@ -29,6 +29,7 @@ require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/o
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Eval/Schema/SchemaValidator.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/DocumentPayload.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/ExtractionPromptBuilder.php';
+require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/ExtractionTelemetry.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/ExtractionResult.php';
 require_once __DIR__ . '/../../../../../../../interface/modules/custom_modules/oe-module-clinical-copilot/src/Service/Extraction/DocumentExtractionService.php';
 require_once __DIR__ . '/../../../../../../../tests/Tests/Fixtures/ClinicalCopilot/FakeAnthropicTransporter.php';
@@ -66,6 +67,64 @@ class DocumentExtractionServiceTest extends TestCase
         self::assertTrue($result->success);
         self::assertNotNull($result->document);
         self::assertSame(SchemaDocType::LabPdf, $result->document->docType);
+    }
+
+    public function testSuccessCarriesTelemetryWithFullCompleteness(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode([
+            'doc_type' => 'lab_pdf',
+            'fields' => self::VALID_LAB_FIELDS,
+        ], JSON_THROW_ON_ERROR));
+        $payload = DocumentPayload::fromBytes('lab.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-t1', $payload, SchemaDocType::LabPdf);
+
+        $telemetry = $result->telemetry;
+        self::assertNotNull($telemetry);
+        self::assertSame('claude-opus-5', $telemetry->model);
+        self::assertSame(7, $telemetry->fieldsExpected);
+        self::assertSame([], $telemetry->missingFields);
+        self::assertSame(1.0, $telemetry->completeness());
+        self::assertGreaterThanOrEqual($telemetry->startedAt, $telemetry->endedAt);
+        self::assertGreaterThanOrEqual(0, $telemetry->inputTokens);
+        self::assertGreaterThanOrEqual(0, $telemetry->outputTokens);
+    }
+
+    /**
+     * An incomplete extraction must be visible without trusting the model to
+     * say so: the missing schema field names fall out of SchemaValidator.
+     */
+    public function testSchemaInvalidResponseReportsWhichFieldsAreMissing(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText(json_encode([
+            'doc_type' => 'lab_pdf',
+            'fields' => ['test_name' => 'HbA1c', 'value' => '7.2'],
+        ], JSON_THROW_ON_ERROR));
+        $payload = DocumentPayload::fromBytes('lab.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-t2', $payload, SchemaDocType::LabPdf);
+
+        $telemetry = $result->telemetry;
+        self::assertNotNull($telemetry);
+        self::assertSame(
+            ['unit', 'reference_range', 'collection_date', 'abnormal_flag', 'source_citation'],
+            $telemetry->missingFields,
+        );
+        self::assertSame(2, $telemetry->fieldsPresent());
+        self::assertSame(0.2857, $telemetry->completeness());
+    }
+
+    public function testUnparseableResponseCountsEveryFieldAsMissing(): void
+    {
+        $factory = (new ScriptedAnthropicClientFactory())->finalText('not json at all');
+        $payload = DocumentPayload::fromBytes('lab.pdf', 'application/pdf', '%PDF-1.4 fake bytes');
+
+        $result = (new DocumentExtractionService($factory))->extract('corr-t3', $payload, SchemaDocType::LabPdf);
+
+        $telemetry = $result->telemetry;
+        self::assertNotNull($telemetry);
+        self::assertSame(0, $telemetry->fieldsPresent());
+        self::assertSame(0.0, $telemetry->completeness());
     }
 
     public function testSchemaInvalidResponseIsReportedNotSilentlyTrusted(): void

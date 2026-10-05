@@ -86,7 +86,7 @@ final class DocumentIngestionPipeline
             'fields' => $stampedFields,
         ]) ?? $extraction->document;
 
-        return DocumentIngestionResult::success($extractionId, $documentId, $stampedDocument);
+        return DocumentIngestionResult::success($extractionId, $documentId, $stampedDocument, $extraction->telemetry);
     }
 
     /**

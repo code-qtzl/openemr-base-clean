@@ -29,6 +29,8 @@ use JsonException;
 use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Modules\ClinicalCopilot\Service\AskResult;
+use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
+use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\ExtractionTelemetry;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Throwable;
@@ -158,6 +160,76 @@ final readonly class LangfuseTracer
         }
 
         $this->send($correlationId, $spans);
+    }
+
+    /**
+     * Traces one document extraction (the upload path, which is a separate
+     * request from chat and was previously invisible in Langfuse): a root
+     * span for the whole ingest plus a generation span carrying the VLM
+     * call's model, tokens and latency. Only counts and schema field names
+     * are attached -- never extracted values, filenames or document text.
+     *
+     * @param ?string $failureReason ExtractionResult::failureReason -- one of
+     *                               a fixed set of generic parse-failure
+     *                               strings, never model output.
+     */
+    public function traceExtraction(
+        string $correlationId,
+        int $patientId,
+        string $authUser,
+        SchemaDocType $docType,
+        bool $success,
+        bool $schemaValid,
+        ?string $failureReason,
+        ExtractionTelemetry $telemetry,
+        float $requestStartedAt,
+        float $requestEndedAt,
+    ): void {
+        $rootSpanId = Span::newSpanId();
+
+        $this->send($correlationId, [
+            new Span(
+                spanId: $rootSpanId,
+                parentSpanId: null,
+                name: 'clinical-copilot.extract',
+                startedAt: $requestStartedAt,
+                endedAt: $requestEndedAt,
+                attributes: [
+                    'langfuse.trace.name' => 'clinical-copilot-extraction',
+                    'langfuse.observation.type' => 'span',
+                    'langfuse.observation.level' => $success ? 'DEFAULT' : 'WARNING',
+                    'langfuse.user.id' => $authUser,
+                    'langfuse.trace.metadata.pid' => $patientId,
+                    'langfuse.trace.metadata.correlation_id' => $correlationId,
+                    'langfuse.trace.metadata.doc_type' => $docType->value,
+                    'langfuse.trace.metadata.success' => $success,
+                    'langfuse.trace.metadata.schema_valid' => $schemaValid,
+                    'langfuse.trace.metadata.fields_expected' => $telemetry->fieldsExpected,
+                    'langfuse.trace.metadata.fields_present' => $telemetry->fieldsPresent(),
+                    'langfuse.trace.metadata.completeness' => $telemetry->completeness(),
+                    'langfuse.trace.metadata.missing_fields' => implode(',', $telemetry->missingFields),
+                    'langfuse.trace.metadata.failure_reason' => $failureReason ?? '',
+                    'langfuse.trace.tags' => array_filter([
+                        'extraction',
+                        $success ? 'extraction-succeeded' : 'extraction-failed',
+                        $telemetry->missingFields !== [] ? 'incomplete-extraction' : null,
+                    ]),
+                ],
+            ),
+            new Span(
+                spanId: Span::newSpanId(),
+                parentSpanId: $rootSpanId,
+                name: 'anthropic.messages',
+                startedAt: $telemetry->startedAt,
+                endedAt: $telemetry->endedAt,
+                attributes: [
+                    'langfuse.observation.type' => 'generation',
+                    'gen_ai.request.model' => $telemetry->model,
+                    'gen_ai.usage.input_tokens' => $telemetry->inputTokens,
+                    'gen_ai.usage.output_tokens' => $telemetry->outputTokens,
+                ],
+            ),
+        ]);
     }
 
     /**

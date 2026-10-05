@@ -93,13 +93,32 @@ retrieval and Voyage is unknown until the spans below are fixed.
   behaviour is covered separately in PERFORMANCE_BASELINE.md.
 - Cost comes from Langfuse's price table, not Anthropic's invoice.
 
+## Instrumentation added after this report
+
+Commits `d907dd1be`, `6b021ac96` and the extraction-trace commit that follows
+them fix the gaps above for **new** traffic. The numbers in this report were
+captured before them and are not retroactively improved.
+
+- Handoff and tool spans now time the worker's real work.
+- `voyage.embed`, `retrieval.dense_rank`, `retrieval.fulltext` and
+  `voyage.rerank` appear as child spans with counts and scores only. A Voyage
+  429 retry sleep (21 s) shows up as a long `voyage.embed` or `voyage.rerank`.
+- Document extraction now has its own trace (`clinical-copilot.extract`):
+  model, tokens, latency, `schema_valid`, and **extraction completeness**
+  (required schema fields present and well-formed, out of the doc type's
+  required fields, plus the missing field names). This is a deterministic proxy
+  for "extraction confidence", not a model-reported score.
+- Still not captured: Voyage token/cost, per-call Anthropic HTTP timings
+  (the `anthropic.messages` generation on chat traces still spans the whole
+  request), and retrieval-hit counts on the trace root.
+
 ## Suggested follow-ups
 
-- Wrap VLM extraction and the Voyage embed/rerank calls in their own
-  Langfuse spans (with token/cost attributes) so the whole Week 2 flow is
-  measurable, and record extraction confidence and retrieval-hit counts as
-  span attributes.
-- Re-run a larger real-API sample (about 20–30 mixed questions) once those
-  spans exist, to get meaningful percentiles.
-- Look at trimming Week 2 context (fewer or shorter guideline chunks, a
-  summary of extracted fields) to pull the 28k-token average down.
+- Re-run a larger real-API sample (about 20-30 mixed questions plus a few
+  lab-PDF and intake uploads) now that the spans exist, and replace this
+  report's per-step section with measured values. A few dollars at the Week 2
+  mean of about $0.20 per question.
+- Record Voyage token usage and per-call Anthropic request timings so the
+  generation span can be split from tool and retrieval time.
+- Look at trimming Week 2 context (fewer or shorter guideline chunks, a summary
+  of extracted fields) to pull the 28k-token average down.

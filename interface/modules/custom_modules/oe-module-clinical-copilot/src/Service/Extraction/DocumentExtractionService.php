@@ -27,6 +27,7 @@ use OpenEMR\Modules\ClinicalCopilot\Service\CopilotService;
 use OpenEMR\Modules\ClinicalCopilot\Service\DefaultAnthropicClientFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\ExtractedDocument;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
+use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaFinding;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaValidator;
 use RuntimeException;
 
@@ -49,6 +50,7 @@ final class DocumentExtractionService
 
         $client = $this->clientFactory->create($apiKey, $correlationId);
 
+        $startedAt = microtime(true);
         $message = $client->messages->create(
             maxTokens: self::MAX_TOKENS,
             messages: [[
@@ -61,7 +63,42 @@ final class DocumentExtractionService
             model: self::MODEL,
         );
 
-        $text = self::firstTextBlock($message->content);
+        $endedAt = microtime(true);
+
+        $result = self::parse($message->content, $docType);
+
+        $expected = SchemaValidator::requiredFieldNames($docType);
+        $validation = $result->validation;
+        // No parsed document means nothing usable came back: every field is
+        // missing. A parsed, schema-valid document has no validation findings.
+        if ($result->document === null) {
+            $missing = $expected;
+        } elseif ($validation === null) {
+            $missing = [];
+        } else {
+            $missing = array_map(
+                static fn (SchemaFinding $finding): string => $finding->field,
+                $validation->findings,
+            );
+        }
+
+        return $result->withTelemetry(new ExtractionTelemetry(
+            model: self::MODEL,
+            startedAt: $startedAt,
+            endedAt: $endedAt,
+            inputTokens: $message->usage->inputTokens,
+            outputTokens: $message->usage->outputTokens,
+            fieldsExpected: count($expected),
+            missingFields: $missing,
+        ));
+    }
+
+    /**
+     * @param list<mixed> $content The model response's content blocks.
+     */
+    private static function parse(array $content, SchemaDocType $docType): ExtractionResult
+    {
+        $text = self::firstTextBlock($content);
         if ($text === null) {
             return ExtractionResult::failedToParse('model returned no text content');
         }

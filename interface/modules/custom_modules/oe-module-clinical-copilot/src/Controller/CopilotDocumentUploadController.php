@@ -37,6 +37,7 @@ use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Modules\ClinicalCopilot\Service\Eval\Schema\SchemaDocType;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentIngestionPipeline;
 use OpenEMR\Modules\ClinicalCopilot\Service\Extraction\DocumentPayload;
+use OpenEMR\Modules\ClinicalCopilot\Service\Observability\LangfuseTracer;
 use OpenEMR\Modules\ClinicalCopilot\Service\SessionRateLimiter;
 use Ramsey\Uuid\Uuid;
 use RuntimeException;
@@ -56,6 +57,7 @@ final readonly class CopilotDocumentUploadController
     public function __construct(
         private DocumentIngestionPipeline $pipeline = new DocumentIngestionPipeline(),
         private SessionRateLimiter $rateLimiter = new SessionRateLimiter(),
+        private LangfuseTracer $tracer = new LangfuseTracer(),
     ) {
     }
 
@@ -128,7 +130,28 @@ final readonly class CopilotDocumentUploadController
         }
 
         try {
+            $ingestStartedAt = microtime(true);
             $result = $this->pipeline->ingest($patientId, $correlationId, $payload, $docType);
+            $ingestEndedAt = microtime(true);
+
+            $telemetry = $result->telemetry ?? $result->extractionFailure?->telemetry;
+            if ($telemetry !== null) {
+                $authUser = $session->get('authUser');
+                $this->tracer->traceExtraction(
+                    $correlationId,
+                    $patientId,
+                    is_string($authUser) ? $authUser : '',
+                    $docType,
+                    $result->success,
+                    // Success means the extraction passed SchemaValidator; every
+                    // failure is either schema-invalid or unparseable.
+                    $result->success,
+                    $result->extractionFailure?->failureReason,
+                    $telemetry,
+                    $ingestStartedAt,
+                    $ingestEndedAt,
+                );
+            }
 
             if ($result->success && $result->document !== null) {
                 return new JsonResponse([
