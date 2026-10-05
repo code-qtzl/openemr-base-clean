@@ -141,10 +141,13 @@ final class ResponseVerifier
                 );
             }
 
-            if (!self::hasRequiredCitationFields($citation)) {
+            $missing = self::missingCitationFields($citation);
+            if ($missing !== []) {
+                // Field names only (never claim text or quoted values), so the
+                // reason is safe to log and to attach to a trace.
                 return VerificationOutcome::rejected(
                     self::FALLBACK_REPLY,
-                    sprintf("claim cites '%s' with an incomplete citation", $sourceId),
+                    sprintf("claim cites '%s' with an incomplete citation (missing: %s)", $sourceId, implode(', ', $missing)),
                 );
             }
 
@@ -180,25 +183,39 @@ final class ResponseVerifier
      * rule for the same reason page_or_section's exception is documented
      * rather than silently diverging twice.
      */
-    private static function hasRequiredCitationFields(Citation $citation): bool
+    /**
+     * @return list<string> Names of the required citation fields that are
+     *                      missing or blank; empty when the citation is complete.
+     */
+    private static function missingCitationFields(Citation $citation): array
     {
-        if (self::isBlank($citation->sourceType) || self::isBlank($citation->sourceId) || self::isBlank($citation->quoteOrValue)) {
-            return false;
-        }
+        $missing = [];
 
+        if (self::isBlank($citation->sourceType)) {
+            $missing[] = 'source_type';
+        }
+        if (self::isBlank($citation->sourceId)) {
+            $missing[] = 'source_id';
+        }
+        if (self::isBlank($citation->quoteOrValue)) {
+            $missing[] = 'quote_or_value';
+        }
         if (self::isBlank($citation->fieldOrChunkId)) {
-            return false;
+            $missing[] = 'field_or_chunk_id';
         }
-
         if ($citation->sourceType !== self::CHART_TOOL_SOURCE_TYPE && self::isBlank($citation->pageOrSection)) {
-            return false;
+            $missing[] = 'page_or_section';
+        }
+        if ($citation->requiresDocumentLinkage()) {
+            if (self::isBlank($citation->documentId)) {
+                $missing[] = 'document_id';
+            }
+            if ($citation->bbox === null) {
+                $missing[] = 'bbox';
+            }
         }
 
-        if ($citation->requiresDocumentLinkage() && (self::isBlank($citation->documentId) || $citation->bbox === null)) {
-            return false;
-        }
-
-        return true;
+        return $missing;
     }
 
     private static function isBlank(?string $value): bool

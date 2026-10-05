@@ -98,7 +98,7 @@
         },
         {
             "name": "submit_answer",
-            "description": "Give your final answer to the clinician. Every clinical claim must carry a citation object grounding it in a tool call made this turn. citation.source_type is one of chart_tool (structured OpenEMR data), lab_pdf or intake_form (document extraction), or guideline (guideline evidence). citation.source_id is always the specific tool call that supports the claim (e.g. get_medications, get_extracted_documents, search_guideline_evidence) -- never a worker's name (consult_chart_worker/consult_document_worker/consult_evidence_worker are not valid citations). citation.quote_or_value is the exact value or quote grounding the claim. citation.page_or_section and citation.field_or_chunk_id are required for every source_type except chart_tool, where a database row has no page. For lab_pdf and intake_form citations, also copy citation.document_id and citation.bbox verbatim from the extracted document's fields.source_citation (returned by get_extracted_documents) -- never invent either; if the extracted document has none, omit both rather than guessing. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
+            "description": "Give your final answer to the clinician. Every clinical claim must carry a citation object grounding it in a tool call made this turn. citation.source_type is one of chart_tool (structured OpenEMR data), lab_pdf or intake_form (document extraction), or guideline (guideline evidence). citation.source_id is always the specific tool call that supports the claim (e.g. get_medications, get_extracted_documents, search_guideline_evidence) -- never a worker's name (consult_chart_worker/consult_document_worker/consult_evidence_worker are not valid citations). citation.quote_or_value is the exact value or quote grounding the claim. citation.field_or_chunk_id is required for EVERY source_type, chart_tool included: for a chart_tool citation it is the name of the field in the tool's row that you are quoting (e.g. title or diagnosis for get_active_problems, drug or dosage for get_medications, value or result_date for get_a1c_series, reason for get_recent_encounters); for a guideline citation it is the chunk_id. citation.page_or_section is required for every source_type except chart_tool, where a database row has no page. For lab_pdf and intake_form citations, also copy citation.document_id and citation.bbox verbatim from the extracted document's fields.source_citation (returned by get_extracted_documents) -- never invent either; if the extracted document has none, omit both rather than guessing. If the tool results do not contain enough information to answer the question, set insufficient_information to true instead of guessing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -138,7 +138,7 @@
                                         },
                                         "field_or_chunk_id": {
                                             "type": "string",
-                                            "description": "The specific field or chunk within the source, e.g. a column name or a retrieval chunk id."
+                                            "description": "Required for every source_type, including chart_tool. The specific field or chunk within the source: the name of the row field you are quoting (e.g. drug, value, title) or a retrieval chunk id."
                                         },
                                         "quote_or_value": {
                                             "type": "string",
@@ -185,6 +185,7 @@
                                     "required": [
                                         "source_type",
                                         "source_id",
+                                        "field_or_chunk_id",
                                         "quote_or_value"
                                     ]
                                 }

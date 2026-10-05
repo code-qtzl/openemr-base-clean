@@ -50,6 +50,60 @@ class ResponseVerifierTest extends TestCase
         self::assertSame(ResponseVerifier::FALLBACK_REPLY, $outcome->reply);
     }
 
+    /**
+     * The reason must name which fields are missing (names only, never claim
+     * text or values) so a verification fallback is diagnosable from logs.
+     */
+    public function testIncompleteCitationReasonNamesTheMissingFieldsWithoutLeakingValues(): void
+    {
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [[
+                    'text' => 'Patient takes metformin 500 mg.',
+                    'citation' => [
+                        'source_type' => 'chart_tool',
+                        'source_id' => 'get_medications',
+                        'quote_or_value' => 'metformin 500 mg',
+                    ],
+                ]],
+            ],
+            calledTools: ['get_medications'],
+            toolRowCounts: ['get_medications' => 3],
+        );
+
+        self::assertFalse($outcome->passed);
+        self::assertSame(
+            "claim cites 'get_medications' with an incomplete citation (missing: field_or_chunk_id)",
+            $outcome->reason,
+        );
+        self::assertStringNotContainsString('metformin', (string) $outcome->reason);
+    }
+
+    public function testDocumentCitationReasonNamesDocumentIdAndBboxWhenOmitted(): void
+    {
+        $outcome = ResponseVerifier::verify(
+            [
+                'insufficient_information' => false,
+                'claims' => [[
+                    'text' => 'Uploaded lab shows HbA1c 8.1%.',
+                    'citation' => [
+                        'source_type' => 'lab_pdf',
+                        'source_id' => 'get_extracted_documents',
+                        'page_or_section' => 'page_1',
+                        'field_or_chunk_id' => 'value',
+                        'quote_or_value' => '8.1',
+                    ],
+                ]],
+            ],
+            calledTools: ['get_extracted_documents'],
+            toolRowCounts: ['get_extracted_documents' => 1],
+        );
+
+        self::assertFalse($outcome->passed);
+        self::assertStringEndsWith('(missing: document_id, bbox)', (string) $outcome->reason);
+    }
+
     public function testFullyCitedChartToolClaimPasses(): void
     {
         // chart_tool citations are the documented divergence from
