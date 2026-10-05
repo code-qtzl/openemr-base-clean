@@ -29,15 +29,14 @@ class StepRecorderTest extends TestCase
             static function (): array {
                 usleep(2000);
 
-                return [1, 2, 3];
+                return array_map(static fn (int $n): int => $n * 2, [1, 2, 3]);
             },
             static fn (array $items): array => ['returned' => count($items)],
         );
 
-        self::assertSame([1, 2, 3], $result);
+        self::assertSame([2, 4, 6], $result);
         $steps = $recorder->steps();
         self::assertCount(1, $steps);
-        self::assertInstanceOf(TelemetryStep::class, $steps[0]);
         self::assertSame('voyage.rerank', $steps[0]->name);
         self::assertSame(['returned' => 3], $steps[0]->attributes);
         self::assertGreaterThan($steps[0]->startedAt, $steps[0]->endedAt);
@@ -60,9 +59,7 @@ class StepRecorderTest extends TestCase
         $recorder = new StepRecorder();
 
         try {
-            $recorder->measure('voyage.embed', static function (): never {
-                throw new RuntimeException('secret SELECT * FROM patient_data');
-            });
+            $recorder->measure('voyage.embed', static fn (): int => self::failWithSensitiveMessage());
             self::fail('expected the exception to propagate');
         } catch (RuntimeException $e) {
             self::assertSame('secret SELECT * FROM patient_data', $e->getMessage());
@@ -80,5 +77,11 @@ class StepRecorderTest extends TestCase
         $recorder->measure('b', static fn (): int => 2);
 
         self::assertSame(['a', 'b'], array_map(static fn (TelemetryStep $s): string => $s->name, $recorder->steps()));
+    }
+
+    /** Declared `int` (not `never`) so static analysis treats the measured call as returning normally. */
+    private static function failWithSensitiveMessage(): int
+    {
+        throw new RuntimeException('secret SELECT * FROM patient_data');
     }
 }

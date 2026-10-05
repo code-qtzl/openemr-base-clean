@@ -130,6 +130,8 @@ final class SupervisorTest extends TestCase
                         'page_or_section' => 'page_1',
                         'field_or_chunk_id' => 'value',
                         'quote_or_value' => '7.2',
+                        'document_id' => '1',
+                        'bbox' => ['page' => 1, 'x0' => 0.1, 'y0' => 0.1, 'x1' => 0.5, 'y1' => 0.2],
                     ],
                 ]],
             ])
@@ -172,6 +174,8 @@ final class SupervisorTest extends TestCase
                             'page_or_section' => 'page_1',
                             'field_or_chunk_id' => 'value',
                             'quote_or_value' => '7.2',
+                            'document_id' => '1',
+                            'bbox' => ['page' => 1, 'x0' => 0.1, 'y0' => 0.1, 'x1' => 0.5, 'y1' => 0.2],
                         ],
                     ],
                 ],

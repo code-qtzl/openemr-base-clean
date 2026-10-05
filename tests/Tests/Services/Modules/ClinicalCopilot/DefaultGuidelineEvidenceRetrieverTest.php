@@ -140,7 +140,6 @@ final class DefaultGuidelineEvidenceRetrieverTest extends TestCase
 
         $byName = [];
         foreach ($recorder->steps() as $step) {
-            self::assertInstanceOf(TelemetryStep::class, $step);
             $byName[$step->name] = $step;
         }
 

@@ -262,7 +262,7 @@ final readonly class Supervisor
      * handoff" AgentForge2 asks for, visible in Langfuse alongside the
      * granular spans it fanned out to.
      *
-     * @param Closure(): array<string, \OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult> $results
+     * @param Closure(): array<string, \OpenEMR\Modules\ClinicalCopilot\Service\Result\A1cSeriesResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ActiveProblemsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\MedicationsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\RecentEncountersResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\ExtractedDocumentsResult|\OpenEMR\Modules\ClinicalCopilot\Service\Result\GuidelineEvidenceResult> $consult
      * @param list<string> $toolsUsed
      * @param array<string, int> $toolRowCounts
      * @param list<ToolCallSpan> $toolCallSpans
